@@ -5,11 +5,13 @@ edition = "2024"
 
 
 [dependencies]
-binius-prover = { git = "https://github.com/binius-zk/binius64", rev = "41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896" }
-binius-verifier = { git = "https://github.com/binius-zk/binius64", rev = "41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896" }
-binius-math = { git = "https://github.com/binius-zk/binius64", rev = "41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896" }
-binius-field = { git = "https://github.com/binius-zk/binius64", rev = "41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896" }
-binius-transcript = { git = "https://github.com/binius-zk/binius64", rev = "41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896" }
+binius-prover = { path = "../binius/binius64/crates/prover" }
+binius-verifier = { path = "../binius/binius64/crates/verifier" }
+binius-math = { path = "../binius/binius64/crates/math" }
+binius-field = { path = "../binius/binius64/crates/field" }
+binius-transcript = { path = "../binius/binius64/crates/transcript" }
+binius-spartan-prover = { path = "../binius/binius64/crates/spartan-prover" }
+binius-spartan-verifier = { path = "../binius/binius64/crates/spartan-verifier" }
 rand = { version = "0.9.1", default-features = false, features = [
     "std",
     "std_rng",
@@ -19,6 +21,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rayon = {version = "1.8", optional = true}
 clap = { version = "4.0", features = ["derive"] }
+digest = "0.10"
 uninit = "0.6.2"
 kate = { git = "https://github.com/availproject/avail-core", rev = "d33781a3b7f6817105b88057b8754df86e69f385" , optional=true}
 

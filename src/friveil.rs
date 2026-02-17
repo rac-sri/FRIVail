@@ -20,35 +20,38 @@
 //! ```
 
 use crate::traits::{FriVeilSampling, FriVeilUtils};
+use binius_field::field::FieldOps;
 pub use binius_field::PackedField;
 use binius_field::{ExtensionField, Field, PackedExtension, Random};
 use binius_math::{
-    BinarySubspace, FieldBuffer, FieldSliceMut, ReedSolomonCode,
-    inner_product::inner_product,
+    bit_reverse::bit_reverse_packed,
+    inner_product::{inner_product, inner_product_buffers},
     multilinear::eq::eq_ind_partial_eval,
     ntt::{
-        AdditiveNTT, NeighborsLastMultiThread,
         domain_context::{self, GenericPreExpanded},
+        AdditiveNTT, NeighborsLastMultiThread,
     },
+    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut, ReedSolomonCode,
 };
 use binius_prover::{
     fri::CommitOutput,
     hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{MerkleTreeProver, prover::BinaryMerkleTreeProver},
-    pcs::OneBitPCSProver,
+    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
+use binius_spartan_prover::pcs::PCSProver;
+use binius_spartan_verifier::pcs::verify as spartan_verify;
 use binius_transcript::{Buf, ProverTranscript, VerifierTranscript};
 pub use binius_verifier::config::B128;
 use binius_verifier::{
-    config::{B1, StdChallenger},
+    config::{StdChallenger, B1},
     fri::FRIParams,
     hash::{StdCompression, StdDigest},
     merkle_tree::{BinaryMerkleTreeScheme, MerkleTreeScheme},
-    pcs::verify,
 };
+
 use itertools::Itertools;
-use rand::{SeedableRng, rngs::StdRng};
-use std::{iter::repeat_with, marker::PhantomData, mem::MaybeUninit};
+use rand::{rngs::StdRng, SeedableRng};
+use std::{marker::PhantomData, mem::MaybeUninit};
 use tracing::debug;
 
 #[cfg(feature = "parallel")]
@@ -158,7 +161,7 @@ where
         String,
     > {
         let committed_rs_code =
-            ReedSolomonCode::<B128>::new(packed_buffer_log_len, self.log_inv_rate).unwrap();
+            ReedSolomonCode::<B128>::new(packed_buffer_log_len, self.log_inv_rate);
 
         let fri_log_batch_size = 0;
 
@@ -176,7 +179,7 @@ where
         )
         .map_err(|e| e.to_string())?;
 
-        let subspace = BinarySubspace::with_dim(fri_params.rs_code().log_len()).unwrap();
+        let subspace = BinarySubspace::with_dim(fri_params.rs_code().log_len());
 
         let domain_context = domain_context::GenericPreExpanded::generate_from_subspace(&subspace);
         let ntt = NeighborsLastMultiThread::new(domain_context, self.log_num_shares);
@@ -200,8 +203,8 @@ where
     /// For production use, consider using a cryptographically secure RNG.
     pub fn calculate_evaluation_point_random(&self) -> Result<Vec<P::Scalar>, String> {
         let mut rng = StdRng::from_seed([0; 32]);
-        let evaluation_point: Vec<P::Scalar> = repeat_with(|| P::Scalar::random(&mut rng))
-            .take(self.n_vars)
+        let evaluation_point: Vec<P::Scalar> = (0..self.n_vars)
+            .map(|_| <B128 as Random>::random(&mut rng))
             .collect();
         Ok(evaluation_point)
     }
@@ -284,7 +287,7 @@ where
     ) -> Result<
         CommitOutput<
             P,
-            Vec<u8>,
+            digest::Output<StdDigest>,
             <BinaryMerkleTreeProver<
                 P::Scalar,
                 StdDigest,
@@ -293,15 +296,8 @@ where
         >,
         String,
     > {
-        let pcs = OneBitPCSProver::new(ntt, &self.merkle_prover, &fri_params);
-        let commit_output = pcs.commit(packed_mle.clone()).map_err(|e| e.to_string())?;
-
-        // Convert the digest type to Vec<u8> for easier handling
-        Ok(CommitOutput {
-            codeword: commit_output.codeword,
-            commitment: commit_output.commitment.to_vec(),
-            committed: commit_output.committed,
-        })
+        let pcs = PCSProver::new(ntt, &self.merkle_prover, &fri_params);
+        pcs.commit(packed_mle.to_ref()).map_err(|e| e.to_string())
     }
 
     /// Generate an evaluation proof for the committed polynomial
@@ -332,7 +328,7 @@ where
     /// # Example
     ///
     /// ```ignore
-    /// let transcript = friveil.prove(
+    /// let (transcript, evaluation_claim) = friveil.prove(
     ///     packed_mle,
     ///     fri_params,
     ///     &ntt,
@@ -347,7 +343,7 @@ where
         ntt: &NeighborsLastMultiThread<GenericPreExpanded<P::Scalar>>,
         commit_output: &CommitOutput<
             P,
-            Vec<u8>,
+            digest::Output<StdDigest>,
             <BinaryMerkleTreeProver<
                 P::Scalar,
                 StdDigest,
@@ -355,27 +351,30 @@ where
             > as MerkleTreeProver<P::Scalar>>::Committed,
         >,
         evaluation_point: &[P::Scalar],
-    ) -> Result<VerifierTranscript<StdChallenger>, String> {
-        let pcs = OneBitPCSProver::new(ntt, &self.merkle_prover, &fri_params);
+    ) -> Result<(VerifierTranscript<StdChallenger>, P::Scalar), String> {
+        let pcs = PCSProver::new(ntt, &self.merkle_prover, &fri_params);
 
         let mut prover_transcript = ProverTranscript::new(StdChallenger::default());
 
         // Write commitment to transcript
-        prover_transcript
-            .message()
-            .write_bytes(&commit_output.commitment);
+        prover_transcript.message().write(&commit_output.commitment);
 
-        // Generate FRI proof
+        let eval_point_eq = eq_ind_partial_eval(evaluation_point);
+        println!("eval point len {:?}", eval_point_eq.len());
+        println!("packed mle len {:?}", packed_mle.len());
+        let evaluation_claim = inner_product_buffers(&packed_mle, &eval_point_eq);
+
         pcs.prove(
-            &commit_output.codeword,
+            commit_output.codeword.clone(),
             &commit_output.committed,
             packed_mle,
-            evaluation_point.to_vec(),
+            evaluation_point,
+            evaluation_claim,
             &mut prover_transcript,
         )
         .map_err(|e| e.to_string())?;
 
-        Ok(prover_transcript.into_verifier())
+        Ok((prover_transcript.into_verifier(), evaluation_claim))
     }
 
     /// Encode data using Reed-Solomon code with NTT
@@ -413,19 +412,13 @@ where
 
         let mut encoded = Vec::with_capacity(len);
 
-        rs_code
-            .encode_batch(
-                ntt,
-                data.as_ref(),
-                encoded.spare_capacity_mut(),
-                fri_params.log_batch_size(),
-            )
-            .map_err(|e| e.to_string())?;
-
-        unsafe {
-            // Safety: encode_ext_batch guarantees all elements are initialized on success
-            encoded.set_len(len);
-        }
+        let data_log_len = rs_code.log_dim() + fri_params.log_batch_size();
+        let encoded_buffer = rs_code.encode_batch(
+            ntt,
+            FieldSlice::from_slice(data_log_len, data),
+            fri_params.log_batch_size(),
+        );
+        encoded.extend_from_slice(encoded_buffer.as_ref());
 
         Ok(encoded)
     }
@@ -634,10 +627,14 @@ where
             .map_err(|e| e.to_string())?;
 
         let merkle_prover_scheme = self.merkle_prover.scheme().clone();
-        verify(
+
+        let n_packed_vars = fri_params.rs_code().log_dim() + fri_params.log_batch_size();
+        let eval_point = &evaluation_point[..n_packed_vars];
+
+        spartan_verify(
             verifier_transcript,
             evaluation_claim,
-            evaluation_point,
+            eval_point,
             retrieved_codeword_commitment,
             fri_params,
             &merkle_prover_scheme,
@@ -791,6 +788,14 @@ where
         // Trim to original data size (remove redundancy)
         let trim_len = 1 << (rs_code.log_dim() + fri_params.log_batch_size() - P::LOG_WIDTH);
         decoded.resize(trim_len, P::Scalar::zero());
+
+        // Undo bit-reversal that encode_batch applied internally
+        let data_log_len = rs_code.log_dim() + fri_params.log_batch_size();
+        bit_reverse_packed(FieldSliceMut::from_slice(
+            data_log_len,
+            decoded.as_mut_slice(),
+        ));
+
         Ok(decoded)
     }
 
@@ -896,8 +901,7 @@ where
 
         let output_initialized =
             unsafe { uninit::out_ref::Out::<[P::Scalar]>::from(output).assume_init() };
-        let mut code = FieldSliceMut::from_slice(log_len + log_batch_size, output_initialized)
-            .map_err(|e| e.to_string())?;
+        let mut code = FieldSliceMut::from_slice(log_len + log_batch_size, output_initialized);
 
         let skip_early = log_inv;
         let skip_late = log_batch_size;
@@ -960,7 +964,7 @@ mod tests {
 
     use crate::poly::Utils;
     use binius_field::Field;
-    use binius_math::ntt::{NeighborsLastMultiThread, domain_context::GenericPreExpanded};
+    use binius_math::ntt::{domain_context::GenericPreExpanded, NeighborsLastMultiThread};
     use binius_verifier::{
         config::{B1, B128},
         hash::{StdCompression, StdDigest},
@@ -1076,7 +1080,7 @@ mod tests {
 
         let commit_output = commit_result.unwrap();
         assert!(!commit_output.commitment.is_empty());
-        assert!(!commit_output.codeword.is_empty());
+        assert!(commit_output.codeword.len() > 0);
 
         let commitment_bytes: [u8; 32] = commit_output
             .commitment
@@ -1169,12 +1173,7 @@ mod tests {
         );
         assert!(prove_result.is_ok());
 
-        let mut verifier_transcript = prove_result.unwrap();
-
-        // Calculate evaluation claim
-        let evaluation_claim = friveil
-            .calculate_evaluation_claim(&packed_mle_values.packed_values, &evaluation_point)
-            .expect("Failed to calculate evaluation claim");
+        let (mut verifier_transcript, evaluation_claim) = prove_result.unwrap();
 
         // Verify proof
         let verify_result = friveil.verify_evaluation(
@@ -1214,7 +1213,7 @@ mod tests {
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
 
-        let mut verifier_transcript = friveil
+        let (mut verifier_transcript, _) = friveil
             .prove(
                 packed_mle_values.packed_mle.clone(),
                 fri_params.clone(),
@@ -1243,7 +1242,7 @@ mod tests {
 
     #[test]
     fn test_data_availability_sampling() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
         use tracing::Level;
 
         // Initialize logging for the test
@@ -1361,7 +1360,7 @@ mod tests {
 
     #[test]
     fn test_error_correction_reconstruction() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 
         // Create test data
         let test_data = create_test_data(2048);

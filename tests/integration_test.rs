@@ -1,11 +1,12 @@
+use binius_field::field::FieldOps;
 use frivail::{
-    friveil::{B128, FriVeilDefault, PackedField},
+    friveil::{FriVeilDefault, B128},
     poly::Utils,
     traits::{FriVeilSampling, FriVeilUtils},
 };
-use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 use std::time::Instant;
-use tracing::{Level, debug, error, info, span, warn};
+use tracing::{debug, error, info, span, warn, Level};
 
 #[test]
 fn test_integration_main() {
@@ -346,7 +347,7 @@ fn test_integration_main() {
     let _span = span!(Level::INFO, "proof_generation").entered();
     info!("📝 Phase 9: Generating evaluation proof");
     let start = Instant::now();
-    let mut verifier_transcript = friveil
+    let (mut verifier_transcript, _) = friveil
         .prove(
             packed_mle_values.packed_mle.clone(),
             fri_params.clone(),

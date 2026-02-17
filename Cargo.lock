@@ -858,7 +858,6 @@ dependencies = [
 [[package]]
 name = "binius-core"
 version = "0.1.0"
-source = "git+https://github.com/binius-zk/binius64?rev=41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896#41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896"
 dependencies = [
  "binius-utils",
  "bytemuck",
@@ -869,7 +868,6 @@ dependencies = [
 [[package]]
 name = "binius-field"
 version = "0.1.0"
-source = "git+https://github.com/binius-zk/binius64?rev=41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896#41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896"
 dependencies = [
  "binius-utils",
  "bytemuck",
@@ -881,9 +879,90 @@ dependencies = [
 ]
 
 [[package]]
+name = "binius-hash"
+version = "0.1.0"
+dependencies = [
+ "binius-field",
+ "binius-math",
+ "binius-transcript",
+ "binius-utils",
+ "bytemuck",
+ "bytes",
+ "digest 0.10.7",
+ "itertools 0.14.0",
+ "sha2 0.10.9",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
+name = "binius-iop"
+version = "0.1.0"
+dependencies = [
+ "binius-field",
+ "binius-hash",
+ "binius-ip",
+ "binius-math",
+ "binius-transcript",
+ "binius-utils",
+ "bytes",
+ "digest 0.10.7",
+ "getset",
+ "itertools 0.14.0",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
+name = "binius-iop-prover"
+version = "0.1.0"
+dependencies = [
+ "binius-field",
+ "binius-hash",
+ "binius-iop",
+ "binius-ip",
+ "binius-ip-prover",
+ "binius-math",
+ "binius-transcript",
+ "binius-utils",
+ "bytes",
+ "derive_more 0.99.20",
+ "digest 0.10.7",
+ "getset",
+ "itertools 0.14.0",
+ "rand 0.9.2",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
+name = "binius-ip"
+version = "0.1.0"
+dependencies = [
+ "binius-field",
+ "binius-math",
+ "binius-transcript",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "binius-ip-prover"
+version = "0.1.0"
+dependencies = [
+ "binius-field",
+ "binius-ip",
+ "binius-math",
+ "binius-transcript",
+ "binius-utils",
+ "either",
+ "itertools 0.14.0",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
 name = "binius-math"
 version = "0.1.0"
-source = "git+https://github.com/binius-zk/binius64?rev=41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896#41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896"
 dependencies = [
  "binius-field",
  "binius-utils",
@@ -899,10 +978,12 @@ dependencies = [
 [[package]]
 name = "binius-prover"
 version = "0.1.0"
-source = "git+https://github.com/binius-zk/binius64?rev=41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896#41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896"
 dependencies = [
  "binius-core",
  "binius-field",
+ "binius-hash",
+ "binius-iop-prover",
+ "binius-ip-prover",
  "binius-math",
  "binius-transcript",
  "binius-utils",
@@ -920,9 +1001,59 @@ dependencies = [
 ]
 
 [[package]]
+name = "binius-spartan-frontend"
+version = "0.1.0"
+dependencies = [
+ "binius-field",
+ "binius-utils",
+ "bytemuck",
+ "getset",
+ "itertools 0.14.0",
+ "smallvec",
+]
+
+[[package]]
+name = "binius-spartan-prover"
+version = "0.1.0"
+dependencies = [
+ "binius-field",
+ "binius-iop",
+ "binius-iop-prover",
+ "binius-ip-prover",
+ "binius-math",
+ "binius-prover",
+ "binius-spartan-frontend",
+ "binius-spartan-verifier",
+ "binius-transcript",
+ "binius-utils",
+ "binius-verifier",
+ "digest 0.10.7",
+ "itertools 0.14.0",
+ "rand 0.9.2",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
+name = "binius-spartan-verifier"
+version = "0.1.0"
+dependencies = [
+ "binius-field",
+ "binius-iop",
+ "binius-ip",
+ "binius-math",
+ "binius-spartan-frontend",
+ "binius-transcript",
+ "binius-utils",
+ "binius-verifier",
+ "digest 0.10.7",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
 name = "binius-transcript"
 version = "0.1.0"
-source = "git+https://github.com/binius-zk/binius64?rev=41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896#41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896"
 dependencies = [
  "auto_impl",
  "binius-field",
@@ -936,7 +1067,6 @@ dependencies = [
 [[package]]
 name = "binius-utils"
 version = "0.1.0"
-source = "git+https://github.com/binius-zk/binius64?rev=41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896#41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896"
 dependencies = [
  "array-util",
  "bytemuck",
@@ -944,6 +1074,7 @@ dependencies = [
  "cfg-if",
  "generic-array",
  "itertools 0.14.0",
+ "rand 0.9.2",
  "rayon",
  "thiserror 2.0.17",
  "trait-set",
@@ -952,10 +1083,12 @@ dependencies = [
 [[package]]
 name = "binius-verifier"
 version = "0.1.0"
-source = "git+https://github.com/binius-zk/binius64?rev=41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896#41cda4a3eeb3fcb57bcd324e20a0ffe0b653f896"
 dependencies = [
  "binius-core",
  "binius-field",
+ "binius-hash",
+ "binius-iop",
+ "binius-ip",
  "binius-math",
  "binius-transcript",
  "binius-utils",
@@ -964,7 +1097,6 @@ dependencies = [
  "digest 0.10.7",
  "getset",
  "itertools 0.14.0",
- "sha2 0.10.9",
  "thiserror 2.0.17",
  "tracing",
 ]
@@ -2021,9 +2153,12 @@ dependencies = [
  "binius-field",
  "binius-math",
  "binius-prover",
+ "binius-spartan-prover",
+ "binius-spartan-verifier",
  "binius-transcript",
  "binius-verifier",
  "clap",
+ "digest 0.10.7",
  "divan",
  "itertools 0.14.0",
  "kate",

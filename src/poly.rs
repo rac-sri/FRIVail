@@ -1,3 +1,4 @@
+use binius_field::field::FieldOps;
 use binius_field::{ExtensionField, PackedField};
 use binius_math::FieldBuffer;
 use binius_verifier::config::B1;
@@ -118,7 +119,7 @@ where
         // Create FieldBuffer from scalar values
         // This provides efficient access patterns for polynomial operations
         let packed_mle =
-            FieldBuffer::<P>::from_values(packed_values.as_slice()).map_err(|e| e.to_string())?;
+            FieldBuffer::<P>::from_values(packed_values.as_slice());
 
         // Calculate total number of variables
         // This is the log of packed size plus the scalar bit width
