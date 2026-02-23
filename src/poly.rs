@@ -1,3 +1,4 @@
+use binius_field::field::FieldOps;
 use binius_field::{ExtensionField, PackedField};
 use binius_math::FieldBuffer;
 use binius_verifier::config::B1;
@@ -29,8 +30,8 @@ where
     P: PackedField + ExtensionField<B1>,
     P::Scalar: From<u128> + ExtensionField<B1>,
 {
-    /// Packed field buffer optimized for polynomial operations
-    pub packed_mle: FieldBuffer<P>,
+    /// Packed field buffer optimized for polynomial operations (scalar representation)
+    pub packed_mle: FieldBuffer<P::Scalar>,
     /// Unpacked scalar values for easier access and verification
     pub packed_values: Vec<P::Scalar>,
     /// Total number of variables in the multilinear extension
@@ -112,18 +113,19 @@ where
             values
         };
 
+        println!("packed size {:?}", packed_size);
         // Pad with zeros to reach power-of-2 size
         packed_values.resize(packed_size, P::Scalar::zero());
+
+        // Calculate total number of variables before consuming packed_values
+        let total_n_vars = big_field_n_vars;
 
         // Create FieldBuffer from scalar values
         // This provides efficient access patterns for polynomial operations
         let packed_mle =
-            FieldBuffer::<P>::from_values(packed_values.as_slice()).map_err(|e| e.to_string())?;
+            FieldBuffer::new(big_field_n_vars, packed_values.clone().into_boxed_slice());
 
-        // Calculate total number of variables
-        // This is the log of packed size plus the scalar bit width
-        let big_field_n_vars = packed_mle.log_len();
-        let total_n_vars = big_field_n_vars + self.log_scalar_bit_width;
+        println!("packed mle len {:?}", packed_mle.len());
 
         Ok(PackedMLE::<P> {
             packed_mle,

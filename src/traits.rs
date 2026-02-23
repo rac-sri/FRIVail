@@ -1,14 +1,15 @@
 use binius_field::PackedExtension;
 pub use binius_field::PackedField;
-use binius_math::ntt::{AdditiveNTT, NeighborsLastMultiThread, domain_context::GenericPreExpanded};
+use binius_math::ntt::{domain_context::GenericPreExpanded, AdditiveNTT, NeighborsLastMultiThread};
 use binius_prover::{
     hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{MerkleTreeProver, prover::BinaryMerkleTreeProver},
+    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
 use binius_transcript::VerifierTranscript;
 pub use binius_verifier::config::B128;
+use binius_verifier::merkle_tree::BinaryMerkleTreeScheme;
 use binius_verifier::{
-    config::{B1, StdChallenger},
+    config::{StdChallenger, B1},
     fri::FRIParams,
     hash::{StdCompression, StdDigest},
 };
@@ -24,12 +25,17 @@ pub trait FriVeilSampling<
         corrupted_codeword: &mut [P::Scalar],
         corrupted_indices: &[usize],
     ) -> Result<(), String>;
-    fn verify_evaluation(
+    fn verify(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
         evaluation_claim: P::Scalar,
         evaluation_point: &[P::Scalar],
         fri_params: &FRIParams<P::Scalar>,
+        ntt: &NTT,
+        extra_index: Option<usize>,
+        terminate_codeword: Option<&[P::Scalar]>,
+        layers: Option<&[Vec<digest::Output<StdDigest>>]>,
+        extra_transcript: Option<&mut VerifierTranscript<StdChallenger>>,
     ) -> Result<(), String>;
 
     fn verify_inclusion_proof(
@@ -49,6 +55,22 @@ pub trait FriVeilSampling<
             ParallelCompressionAdaptor<StdCompression>,
         > as MerkleTreeProver<P::Scalar>>::Committed,
         index: usize,
+    ) -> Result<VerifierTranscript<StdChallenger>, String>;
+
+    fn open<'b>(
+        &self,
+        index: usize,
+        query_prover: &binius_prover::fri::FRIQueryProver<
+            'b,
+            P::Scalar,
+            P,
+            BinaryMerkleTreeProver<
+                P::Scalar,
+                StdDigest,
+                ParallelCompressionAdaptor<StdCompression>,
+            >,
+            BinaryMerkleTreeScheme<P::Scalar, StdDigest, StdCompression>,
+        >,
     ) -> Result<VerifierTranscript<StdChallenger>, String>;
 
     fn decode_codeword(
