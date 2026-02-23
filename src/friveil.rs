@@ -675,6 +675,46 @@ where
         Ok(proof_reader)
     }
 
+    /// Generate a Merkle authentication transcript for opening a specific index
+    ///
+    /// Creates a Merkle authentication path (transcript) that proves a value
+    /// at a specific index is correctly committed in the Merkle tree.
+    /// This is a public wrapper around `inclusion_proof()` with a cleaner API.
+    ///
+    /// # Arguments
+    ///
+    /// * `committed` - Merkle tree commitment structure
+    /// * `index` - Position in the codeword to open
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(VerifierTranscript)` - Transcript containing the Merkle authentication path
+    /// * `Err(String)` - Error generating the transcript
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let transcript = friveil.open(&commit_output.committed, 42)?;
+    /// ```
+    fn open(
+        &self,
+        index: usize,
+        committed: &<BinaryMerkleTreeProver<
+            P::Scalar,
+            StdDigest,
+            ParallelCompressionAdaptor<StdCompression>,
+        > as MerkleTreeProver<P::Scalar>>::Committed,
+    ) -> Result<VerifierTranscript<StdChallenger>, String> {
+        let mut proof_writer = ProverTranscript::new(StdChallenger::default());
+        self.merkle_prover
+            .prove_opening(committed, 0, index, &mut proof_writer.message())
+            .map_err(|e| e.to_string())?;
+
+        let proof_reader = proof_writer.into_verifier();
+
+        Ok(proof_reader)
+    }
+
     /// Verify a Merkle inclusion proof for a codeword value
     ///
     /// Verifies that a value at a specific index is correctly committed
@@ -1102,6 +1142,64 @@ mod tests {
             assert!(
                 verify_result.is_ok(),
                 "Inclusion proof verification failed for index {}",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_open_method() {
+        let friveil = TestFriVeil::new(1, 3, 12, 2);
+
+        // Create test data
+        let test_data = create_test_data(1024);
+        let packed_mle_values = Utils::<B128>::new()
+            .bytes_to_packed_mle(&test_data)
+            .expect("Failed to create packed MLE");
+
+        let (fri_params, ntt) = friveil
+            .initialize_fri_context(packed_mle_values.packed_mle.log_len())
+            .expect("Failed to initialize FRI context");
+
+        // Test commit
+        let commit_result = friveil.commit(
+            packed_mle_values.packed_mle.clone(),
+            fri_params.clone(),
+            &ntt,
+        );
+        assert!(commit_result.is_ok());
+
+        let commit_output = commit_result.unwrap();
+        assert!(!commit_output.commitment.is_empty());
+        assert!(commit_output.codeword.len() > 0);
+
+        let commitment_bytes: [u8; 32] = commit_output
+            .commitment
+            .to_vec()
+            .try_into()
+            .expect("We know commitment size is 32 bytes");
+
+        // Test open() method for first few elements
+        for i in 0..std::cmp::min(5, commit_output.codeword.len()) {
+            let value = commit_output.codeword[i];
+
+            // Generate proof using open() method
+            let open_result = friveil.open(i, &commit_output.committed);
+            assert!(open_result.is_ok());
+
+            let mut transcript = open_result.unwrap();
+
+            // Verify the transcript using verify_inclusion_proof
+            let verify_result = friveil.verify_inclusion_proof(
+                &mut transcript,
+                &[value],
+                i,
+                &fri_params,
+                commitment_bytes,
+            );
+            assert!(
+                verify_result.is_ok(),
+                "open() method verification failed for index {}",
                 i
             );
         }

@@ -51,6 +51,16 @@ pub trait FriVeilSampling<
         index: usize,
     ) -> Result<VerifierTranscript<StdChallenger>, String>;
 
+    fn open(
+        &self,
+        index: usize,
+        committed: &<BinaryMerkleTreeProver<
+            P::Scalar,
+            StdDigest,
+            ParallelCompressionAdaptor<StdCompression>,
+        > as MerkleTreeProver<P::Scalar>>::Committed,
+    ) -> Result<VerifierTranscript<StdChallenger>, String>;
+
     fn decode_codeword(
         &self,
         codeword: &[P::Scalar],
