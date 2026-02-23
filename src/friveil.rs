@@ -20,38 +20,38 @@
 //! ```
 
 use crate::traits::{FriVeilSampling, FriVeilUtils};
-pub use binius_field::PackedField;
 use binius_field::field::FieldOps;
-use binius_field::{Field, PackedExtension, Random};
+pub use binius_field::PackedField;
+use binius_field::{ Field, PackedExtension, Random};
 use binius_iop::fri::vcs_optimal_layers_depths_iter;
 use binius_math::{
-    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
     bit_reverse::bit_reverse_packed,
     inner_product::{inner_product, inner_product_buffers},
     multilinear::eq::eq_ind_partial_eval,
     ntt::{
-        AdditiveNTT, NeighborsLastMultiThread,
         domain_context::{self, GenericPreExpanded},
+        AdditiveNTT, NeighborsLastMultiThread,
     },
+    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
 };
 use binius_prover::{
     fri::{CommitOutput, FRIQueryProver},
     hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{MerkleTreeProver, prover::BinaryMerkleTreeProver},
+    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
 use binius_spartan_prover::pcs::PCSProver;
 use binius_spartan_verifier::pcs::verify as spartan_verify;
 use binius_transcript::{Buf, ProverTranscript, VerifierTranscript};
 pub use binius_verifier::config::B128;
 use binius_verifier::{
-    config::{B1, StdChallenger},
+    config::{StdChallenger, B1},
     fri::{ConstantArityStrategy, FRIParams},
     hash::{StdCompression, StdDigest},
     merkle_tree::{BinaryMerkleTreeScheme, MerkleTreeScheme},
 };
 
-use itertools::{Itertools, izip};
-use rand::{SeedableRng, rngs::StdRng};
+use itertools::{izip, Itertools};
+use rand::{rngs::StdRng, SeedableRng};
 use std::{marker::PhantomData, mem::MaybeUninit};
 use tracing::debug;
 
@@ -983,7 +983,7 @@ mod tests {
     use super::*;
 
     use crate::poly::Utils;
-    use binius_math::ntt::{NeighborsLastMultiThread, domain_context::GenericPreExpanded};
+    use binius_math::ntt::{domain_context::GenericPreExpanded, NeighborsLastMultiThread};
     use binius_verifier::{
         config::B128,
         hash::{StdCompression, StdDigest},
@@ -1340,9 +1340,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_data_availability_sampling() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
         use tracing::Level;
 
         // Initialize logging for the test
@@ -1460,7 +1459,7 @@ mod tests {
 
     #[test]
     fn test_error_correction_reconstruction() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 
         // Create test data
         let test_data = create_test_data(2048);

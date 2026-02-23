@@ -2,13 +2,13 @@ use binius_field::field::FieldOps;
 use binius_transcript::VerifierTranscript;
 use binius_verifier::config::StdChallenger;
 use frivail::{
-    friveil::{B128, FriVeilDefault},
+    friveil::{FriVeilDefault, B128},
     poly::Utils,
     traits::{FriVeilSampling, FriVeilUtils},
 };
-use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 use std::time::Instant;
-use tracing::{Level, debug, error, info, span, warn};
+use tracing::{debug, error, info, span, warn, Level};
 
 #[test]
 fn test_integration_main() {
@@ -349,10 +349,10 @@ fn test_integration_main() {
     let _span = span!(Level::INFO, "proof_generation").entered();
     info!("📝 Phase 9: Generating evaluation proof");
     let start = Instant::now();
-    let (_terminate_codeword, transcript_bytes) = friveil
+    let (terminate_codeword, query_prover, transcript_bytes) = friveil
         .prove(
             packed_mle_values.packed_mle.clone(),
-            fri_params.clone(),
+            &fri_params,
             &ntt,
             &commit_output,
             &evaluation_point,
@@ -377,7 +377,14 @@ fn test_integration_main() {
     drop(_span);
 
     let _span = span!(Level::INFO, "final_verification").entered();
-    info!("🔍 Phase 10: Final proof verification");
+    info!("🔍 Phase 10: Final proof verification with extra query");
+
+    // Extract layers from query_prover for extra verification
+    let layers = query_prover.vcs_optimal_layers().unwrap();
+    let terminate_codeword_vec: Vec<_> = terminate_codeword.iter_scalars().collect();
+
+    // Generate extra query proof using open()
+    let mut extra_transcript = friveil.open(0, &query_prover).unwrap();
 
     // Extract transcript bytes for network propagation
     info!(
@@ -389,17 +396,17 @@ fn test_integration_main() {
     let mut verifier_transcript =
         VerifierTranscript::new(StdChallenger::default(), transcript_bytes);
 
-    // Example: On the receiving network node, you would do:
-    // let mut reconstructed_transcript = reconstruct_transcript_from_bytes(transcript_bytes);
-    // Then use it for verification:
-    // friveil.verify(&mut reconstructed_transcript, evaluation_claim, &evaluation_point, &fri_params)?;
-
     let start = Instant::now();
     let result = friveil.verify(
         &mut verifier_transcript,
         evaluation_claim,
         &evaluation_point,
         &fri_params,
+        &ntt,
+        Some(0),
+        Some(&terminate_codeword_vec),
+        Some(&layers),
+        Some(&mut extra_transcript),
     );
     let verification_time = start.elapsed().as_millis();
 
