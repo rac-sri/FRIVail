@@ -355,11 +355,8 @@ where
         prover_transcript.message().write(&commit_output.commitment);
 
         let eval_point_eq = eq_ind_partial_eval(evaluation_point);
-        println!("eval point len {:?}", eval_point_eq.len());
-        println!("packed mle len {:?}", packed_mle.len());
         let evaluation_claim = inner_product_buffers(&packed_mle, &eval_point_eq);
 
-        println!("sdfkldsjf");
         pcs.prove(
             commit_output.codeword.clone(),
             &commit_output.committed,
@@ -635,6 +632,7 @@ where
             fri_params,
             &merkle_prover_scheme,
         )
+        .map(|_| ())
         .map_err(|e| e.to_string())
     }
 
