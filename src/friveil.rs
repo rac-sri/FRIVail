@@ -680,7 +680,8 @@ where
         let n_packed_vars = fri_params.rs_code().log_dim() + fri_params.log_batch_size();
         let eval_point = &evaluation_point[..n_packed_vars];
 
-        spartan_verify(
+        // Verify and get verifier_with_arena using the verifier_with_arena pattern
+        let verifier_with_arena = spartan_verify(
             verifier_transcript,
             evaluation_claim,
             eval_point,
@@ -688,8 +689,12 @@ where
             fri_params,
             &merkle_prover_scheme,
         )
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+        // Get the verifier from arena (demonstrates the verifier_with_arena pattern)
+        let _verifier = verifier_with_arena.verifier();
+
+        Ok(())
     }
 
     /// Generate a Merkle inclusion proof for a specific codeword position
