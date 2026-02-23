@@ -1,12 +1,12 @@
 use binius_field::field::FieldOps;
 use frivail::{
-    friveil::{FriVeilDefault, B128},
+    friveil::{B128, FriVeilDefault},
     poly::Utils,
     traits::{FriVeilSampling, FriVeilUtils},
 };
-use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
 use std::time::Instant;
-use tracing::{debug, error, info, span, warn, Level};
+use tracing::{Level, debug, error, info, span, warn};
 
 #[test]
 fn test_integration_main() {
