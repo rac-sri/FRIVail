@@ -468,6 +468,62 @@ where
             .flat_map(|elm| ExtensionField::<F>::iter_bases(elm))
             .collect()
     }
+
+    /// Generate Merkle authentication proof using FRI query prover
+    ///
+    /// Creates a Merkle authentication proof for a specific index using the FRI query prover.
+    /// This method extracts the optimal VCS layers and generates a proof transcript.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - Position in the codeword to prove
+    /// * `query_prover` - FRI query prover containing the VCS layers and proof data
+    ///
+    /// # Returns
+    ///
+    /// * `Ok((layers, proof_bytes))` - Merkle authentication layers and proof transcript bytes
+    /// * `Err(String)` - Error message if proof generation fails
+    ///
+    /// # Process
+    ///
+    /// 1. Extract optimal VCS layers from query_prover
+    /// 2. Create new transcript for the proof
+    /// 3. Generate proof for specific index using prove_query
+    /// 4. Return layers and transcript bytes
+    pub fn open_with_query_prover(
+        &self,
+        index: usize,
+        query_prover: &binius_prover::fri::FRIQueryProver<
+            'static,
+            P::Scalar,
+            P,
+            BinaryMerkleTreeProver<
+                P::Scalar,
+                StdDigest,
+                ParallelCompressionAdaptor<StdCompression>,
+            >,
+            BinaryMerkleTreeScheme<P::Scalar, StdDigest, StdCompression>,
+        >,
+    ) -> Result<(Vec<Vec<digest::Output<StdDigest>>>, Vec<u8>), String> {
+        // Get layers from query_prover
+        let layers = query_prover
+            .vcs_optimal_layers()
+            .map_err(|e| e.to_string())?;
+
+        // Create new transcript for the proof
+        let mut proof_transcript = ProverTranscript::new(StdChallenger::default());
+        let mut advice = proof_transcript.decommitment();
+
+        // Generate proof for specific index
+        query_prover
+            .prove_query(index, &mut advice)
+            .map_err(|e| e.to_string())?;
+
+        // Get transcript bytes
+        let proof_bytes = proof_transcript.finalize().into();
+
+        Ok((layers, proof_bytes))
+    }
 }
 
 impl<'a, P, VCS, NTT> FriVeilSampling<P, NTT> for FriVeil<'a, P, VCS, NTT>
