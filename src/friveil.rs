@@ -20,37 +20,37 @@
 //! ```
 
 use crate::traits::{FriVeilSampling, FriVeilUtils};
-pub use binius_field::PackedField;
 use binius_field::field::FieldOps;
+pub use binius_field::PackedField;
 use binius_field::{ExtensionField, Field, PackedExtension, Random};
 use binius_math::{
-    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
     bit_reverse::bit_reverse_packed,
     inner_product::{inner_product, inner_product_buffers},
     multilinear::eq::eq_ind_partial_eval,
     ntt::{
-        AdditiveNTT, NeighborsLastMultiThread,
         domain_context::{self, GenericPreExpanded},
+        AdditiveNTT, NeighborsLastMultiThread,
     },
+    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
 };
 use binius_prover::{
     fri::CommitOutput,
     hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{MerkleTreeProver, prover::BinaryMerkleTreeProver},
+    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
 use binius_spartan_prover::pcs::PCSProver;
 use binius_spartan_verifier::pcs::verify as spartan_verify;
 use binius_transcript::{Buf, ProverTranscript, VerifierTranscript};
 pub use binius_verifier::config::B128;
 use binius_verifier::{
-    config::{B1, StdChallenger},
+    config::{StdChallenger, B1},
     fri::{ConstantArityStrategy, FRIParams},
     hash::{StdCompression, StdDigest},
     merkle_tree::{BinaryMerkleTreeScheme, MerkleTreeScheme},
 };
 
 use itertools::Itertools;
-use rand::{SeedableRng, rngs::StdRng};
+use rand::{rngs::StdRng, SeedableRng};
 use std::{marker::PhantomData, mem::MaybeUninit};
 use tracing::debug;
 
@@ -341,7 +341,7 @@ where
             > as MerkleTreeProver<P::Scalar>>::Committed,
         >,
         evaluation_point: &[P::Scalar],
-    ) -> Result<(VerifierTranscript<StdChallenger>, P::Scalar), String> {
+    ) -> Result<(FieldBuffer<P::Scalar>, Vec<u8>), String> {
         let pcs = PCSProver::new(ntt, &self.merkle_prover, &fri_params);
 
         let mut prover_transcript = ProverTranscript::new(StdChallenger::default());
@@ -350,19 +350,24 @@ where
         prover_transcript.message().write(&commit_output.commitment);
 
         let eval_point_eq = eq_ind_partial_eval(evaluation_point);
-        let evaluation_claim = inner_product_buffers(&packed_mle, &eval_point_eq);
+        let _evaluation_claim = inner_product_buffers(&packed_mle, &eval_point_eq);
 
-        pcs.prove(
-            commit_output.codeword.clone(),
-            &commit_output.committed,
-            packed_mle,
-            evaluation_point,
-            evaluation_claim,
-            &mut prover_transcript,
-        )
-        .map_err(|e| e.to_string())?;
+        // Use prove_with_openings instead of prove
+        let (terminate_codeword, _query_prover) = pcs
+            .prove_with_openings(
+                commit_output.codeword.clone(),
+                &commit_output.committed,
+                packed_mle,
+                evaluation_point,
+                _evaluation_claim,
+                &mut prover_transcript,
+            )
+            .map_err(|e| e.to_string())?;
 
-        Ok((prover_transcript.into_verifier(), evaluation_claim))
+        // Get transcript bytes
+        let transcript_bytes = prover_transcript.finalize().into();
+
+        Ok((terminate_codeword, transcript_bytes))
     }
 
     /// Encode data using Reed-Solomon code with NTT
@@ -993,7 +998,7 @@ mod tests {
 
     use crate::poly::Utils;
     use binius_field::Field;
-    use binius_math::ntt::{NeighborsLastMultiThread, domain_context::GenericPreExpanded};
+    use binius_math::ntt::{domain_context::GenericPreExpanded, NeighborsLastMultiThread};
     use binius_verifier::{
         config::{B1, B128},
         hash::{StdCompression, StdDigest},
@@ -1276,7 +1281,15 @@ mod tests {
         );
         assert!(prove_result.is_ok());
 
-        let (mut verifier_transcript, evaluation_claim) = prove_result.unwrap();
+        let (_terminate_codeword, transcript_bytes) = prove_result.unwrap();
+
+        // Reconstruct verifier transcript from bytes
+        let mut verifier_transcript =
+            VerifierTranscript::new(StdChallenger::default(), transcript_bytes);
+
+        // Recalculate evaluation claim
+        let eval_point_eq = eq_ind_partial_eval(&evaluation_point);
+        let evaluation_claim = inner_product_buffers(&packed_mle_values.packed_mle, &eval_point_eq);
 
         // Verify proof
         let verify_result = friveil.verify(
@@ -1316,7 +1329,7 @@ mod tests {
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
 
-        let (mut verifier_transcript, _) = friveil
+        let (_terminate_codeword, transcript_bytes) = friveil
             .prove(
                 packed_mle_values.packed_mle.clone(),
                 fri_params.clone(),
@@ -1325,6 +1338,10 @@ mod tests {
                 &evaluation_point,
             )
             .expect("Failed to generate proof");
+
+        // Reconstruct verifier transcript from bytes
+        let mut verifier_transcript =
+            VerifierTranscript::new(StdChallenger::default(), transcript_bytes);
 
         // Use wrong evaluation claim (should cause verification to fail)
         let wrong_evaluation_claim = B128::from(42u128);
@@ -1346,7 +1363,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_data_availability_sampling() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
         use tracing::Level;
 
         // Initialize logging for the test
@@ -1464,7 +1481,7 @@ mod tests {
 
     #[test]
     fn test_error_correction_reconstruction() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 
         // Create test data
         let test_data = create_test_data(2048);
