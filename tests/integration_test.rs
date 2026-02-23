@@ -1,4 +1,6 @@
 use binius_field::field::FieldOps;
+use binius_transcript::VerifierTranscript;
+use binius_verifier::config::StdChallenger;
 use frivail::{
     friveil::{B128, FriVeilDefault},
     poly::Utils,
@@ -347,7 +349,7 @@ fn test_integration_main() {
     let _span = span!(Level::INFO, "proof_generation").entered();
     info!("📝 Phase 9: Generating evaluation proof");
     let start = Instant::now();
-    let (mut verifier_transcript, _) = friveil
+    let (_terminate_codeword, transcript_bytes) = friveil
         .prove(
             packed_mle_values.packed_mle.clone(),
             fri_params.clone(),
@@ -378,11 +380,14 @@ fn test_integration_main() {
     info!("🔍 Phase 10: Final proof verification");
 
     // Extract transcript bytes for network propagation
-    let transcript_bytes = friveil.get_transcript_bytes(&verifier_transcript);
     info!(
         "📦 Transcript size: {} bytes (ready for network transmission)",
         transcript_bytes.len()
     );
+
+    // Reconstruct verifier transcript from bytes
+    let mut verifier_transcript =
+        VerifierTranscript::new(StdChallenger::default(), transcript_bytes);
 
     // Example: On the receiving network node, you would do:
     // let mut reconstructed_transcript = reconstruct_transcript_from_bytes(transcript_bytes);
