@@ -5,14 +5,14 @@ edition = "2024"
 
 
 [dependencies]
-binius-prover = { path = "../binius/binius64/crates/prover" }
-binius-verifier = { path = "../binius/binius64/crates/verifier" }
-binius-math = { path = "../binius/binius64/crates/math" }
-binius-field = { path = "../binius/binius64/crates/field" }
-binius-transcript = { path = "../binius/binius64/crates/transcript" }
-binius-spartan-prover = { path = "../binius/binius64/crates/spartan-prover" }
-binius-spartan-verifier = { path = "../binius/binius64/crates/spartan-verifier" }
-binius-iop = { path = "../binius/binius64/crates/iop" }
+binius-prover = { git = "https://github.com/rac-sri/binius64", rev = "f0f707beb3dc0c33124c77b78ccd3ef95bf65499" }
+binius-verifier = { git = "https://github.com/rac-sri/binius64", rev = "f0f707beb3dc0c33124c77b78ccd3ef95bf65499" }
+binius-math = { git = "https://github.com/rac-sri/binius64", rev = "f0f707beb3dc0c33124c77b78ccd3ef95bf65499" }
+binius-field = { git = "https://github.com/rac-sri/binius64", rev = "f0f707beb3dc0c33124c77b78ccd3ef95bf65499" }
+binius-transcript = { git = "https://github.com/rac-sri/binius64", rev = "f0f707beb3dc0c33124c77b78ccd3ef95bf65499" }
+binius-spartan-prover = { git = "https://github.com/rac-sri/binius64", rev = "f0f707beb3dc0c33124c77b78ccd3ef95bf65499" }
+binius-spartan-verifier = { git = "https://github.com/rac-sri/binius64", rev = "f0f707beb3dc0c33124c77b78ccd3ef95bf65499" }
+binius-iop = { git = "https://github.com/rac-sri/binius64", rev = "f0f707beb3dc0c33124c77b78ccd3ef95bf65499" }
 rand = { version = "0.9.1", default-features = false, features = [
     "std",
     "std_rng",

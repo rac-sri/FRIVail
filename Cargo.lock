@@ -858,6 +858,7 @@ dependencies = [
 [[package]]
 name = "binius-core"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-utils",
  "bytemuck",
@@ -868,6 +869,7 @@ dependencies = [
 [[package]]
 name = "binius-field"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-utils",
  "bytemuck",
@@ -881,6 +883,7 @@ dependencies = [
 [[package]]
 name = "binius-hash"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-math",
@@ -898,6 +901,7 @@ dependencies = [
 [[package]]
 name = "binius-iop"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-hash",
@@ -917,6 +921,7 @@ dependencies = [
 [[package]]
 name = "binius-iop-prover"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-hash",
@@ -939,6 +944,7 @@ dependencies = [
 [[package]]
 name = "binius-ip"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-math",
@@ -949,6 +955,7 @@ dependencies = [
 [[package]]
 name = "binius-ip-prover"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-ip",
@@ -964,6 +971,7 @@ dependencies = [
 [[package]]
 name = "binius-math"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-utils",
@@ -979,6 +987,7 @@ dependencies = [
 [[package]]
 name = "binius-prover"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-core",
  "binius-field",
@@ -1004,6 +1013,7 @@ dependencies = [
 [[package]]
 name = "binius-spartan-frontend"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-utils",
@@ -1016,6 +1026,7 @@ dependencies = [
 [[package]]
 name = "binius-spartan-prover"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-iop",
@@ -1038,6 +1049,7 @@ dependencies = [
 [[package]]
 name = "binius-spartan-verifier"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-field",
  "binius-iop",
@@ -1055,6 +1067,7 @@ dependencies = [
 [[package]]
 name = "binius-transcript"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "auto_impl",
  "binius-field",
@@ -1068,6 +1081,7 @@ dependencies = [
 [[package]]
 name = "binius-utils"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "array-util",
  "bytemuck",
@@ -1084,6 +1098,7 @@ dependencies = [
 [[package]]
 name = "binius-verifier"
 version = "0.1.0"
+source = "git+https://github.com/rac-sri/binius64?rev=f0f707beb3dc0c33124c77b78ccd3ef95bf65499#f0f707beb3dc0c33124c77b78ccd3ef95bf65499"
 dependencies = [
  "binius-core",
  "binius-field",
