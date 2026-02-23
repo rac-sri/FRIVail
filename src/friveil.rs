@@ -606,7 +606,7 @@ where
     /// 1. Extract commitment from transcript
     /// 2. Run FRI verification protocol
     /// 3. Check consistency with claimed evaluation
-    fn verify_evaluation(
+    fn verify(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
         evaluation_claim: P::Scalar,
@@ -1184,7 +1184,7 @@ mod tests {
         let (mut verifier_transcript, evaluation_claim) = prove_result.unwrap();
 
         // Verify proof
-        let verify_result = friveil.verify_evaluation(
+        let verify_result = friveil.verify(
             &mut verifier_transcript,
             evaluation_claim,
             &evaluation_point,
@@ -1234,7 +1234,7 @@ mod tests {
         // Use wrong evaluation claim (should cause verification to fail)
         let wrong_evaluation_claim = B128::from(42u128);
 
-        let verify_result = friveil.verify_evaluation(
+        let verify_result = friveil.verify(
             &mut verifier_transcript,
             wrong_evaluation_claim,
             &evaluation_point,

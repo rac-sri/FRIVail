@@ -1,14 +1,14 @@
 use binius_field::PackedExtension;
 pub use binius_field::PackedField;
-use binius_math::ntt::{AdditiveNTT, NeighborsLastMultiThread, domain_context::GenericPreExpanded};
+use binius_math::ntt::{domain_context::GenericPreExpanded, AdditiveNTT, NeighborsLastMultiThread};
 use binius_prover::{
     hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{MerkleTreeProver, prover::BinaryMerkleTreeProver},
+    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
 use binius_transcript::VerifierTranscript;
 pub use binius_verifier::config::B128;
 use binius_verifier::{
-    config::{B1, StdChallenger},
+    config::{StdChallenger, B1},
     fri::FRIParams,
     hash::{StdCompression, StdDigest},
 };
@@ -24,7 +24,7 @@ pub trait FriVeilSampling<
         corrupted_codeword: &mut [P::Scalar],
         corrupted_indices: &[usize],
     ) -> Result<(), String>;
-    fn verify_evaluation(
+    fn verify(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
         evaluation_claim: P::Scalar,

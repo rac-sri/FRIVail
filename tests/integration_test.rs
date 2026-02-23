@@ -387,10 +387,10 @@ fn test_integration_main() {
     // Example: On the receiving network node, you would do:
     // let mut reconstructed_transcript = reconstruct_transcript_from_bytes(transcript_bytes);
     // Then use it for verification:
-    // friveil.verify_evaluation(&mut reconstructed_transcript, evaluation_claim, &evaluation_point, &fri_params)?;
+    // friveil.verify(&mut reconstructed_transcript, evaluation_claim, &evaluation_point, &fri_params)?;
 
     let start = Instant::now();
-    let result = friveil.verify_evaluation(
+    let result = friveil.verify(
         &mut verifier_transcript,
         evaluation_claim,
         &evaluation_point,
