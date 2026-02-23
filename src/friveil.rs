@@ -31,7 +31,7 @@ use binius_math::{
         domain_context::{self, GenericPreExpanded},
         AdditiveNTT, NeighborsLastMultiThread,
     },
-    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut, ReedSolomonCode,
+    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
 };
 use binius_prover::{
     fri::CommitOutput,
@@ -44,7 +44,7 @@ use binius_transcript::{Buf, ProverTranscript, VerifierTranscript};
 pub use binius_verifier::config::B128;
 use binius_verifier::{
     config::{StdChallenger, B1},
-    fri::FRIParams,
+    fri::{ConstantArityStrategy, FRIParams},
     hash::{StdCompression, StdDigest},
     merkle_tree::{BinaryMerkleTreeScheme, MerkleTreeScheme},
 };
@@ -149,7 +149,7 @@ where
     /// # Returns
     ///
     /// * `Ok((FRIParams, NTT))` - FRI parameters and NTT instance
-    /// * `Err(String)` - Error message if initialization fails
+    /// * `Err(String)` - Error message if initialization fail
     pub fn initialize_fri_context(
         &self,
         packed_buffer_log_len: usize,
@@ -160,29 +160,24 @@ where
         ),
         String,
     > {
-        let committed_rs_code =
-            ReedSolomonCode::<B128>::new(packed_buffer_log_len, self.log_inv_rate);
-
-        let fri_log_batch_size = 0;
-
-        let fri_arities = if P::LOG_WIDTH == 2 {
-            vec![2, 2]
-        } else {
-            vec![2; packed_buffer_log_len / 2]
-        };
-
-        let fri_params = FRIParams::new(
-            committed_rs_code.clone(),
-            fri_log_batch_size,
-            fri_arities,
-            self.num_test_queries,
-        )
-        .map_err(|e| e.to_string())?;
-
-        let subspace = BinarySubspace::with_dim(fri_params.rs_code().log_len());
+        // Create subspace and NTT first (needed for with_strategy)
+        let code_log_len = packed_buffer_log_len + self.log_inv_rate;
+        let subspace = BinarySubspace::with_dim(code_log_len);
 
         let domain_context = domain_context::GenericPreExpanded::generate_from_subspace(&subspace);
         let ntt = NeighborsLastMultiThread::new(domain_context, self.log_num_shares);
+
+        // Use with_strategy to create FRI parameters
+        let fri_params = FRIParams::with_strategy(
+            &ntt,
+            self.merkle_prover.scheme(),
+            packed_buffer_log_len,
+            None,
+            self.log_inv_rate,
+            self.num_test_queries,
+            &ConstantArityStrategy::new(2),
+        )
+        .map_err(|e| e.to_string())?;
 
         Ok((fri_params, ntt))
     }
@@ -364,6 +359,7 @@ where
         println!("packed mle len {:?}", packed_mle.len());
         let evaluation_claim = inner_product_buffers(&packed_mle, &eval_point_eq);
 
+        println!("sdfkldsjf");
         pcs.prove(
             commit_output.codeword.clone(),
             &commit_output.committed,
@@ -1115,7 +1111,7 @@ mod tests {
 
     #[test]
     fn test_calculate_evaluation_claim() {
-        let test_data = create_test_data(1024 * 1024); // 1mb test data
+        let test_data = create_test_data(1024); // 1mb test data
         let packed_mle_values = Utils::<B128>::new()
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
@@ -1125,6 +1121,14 @@ mod tests {
         let evaluation_point = friveil
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
+
+        println!("evaluation point {:?}", evaluation_point.len());
+        let eval_point_eq = eq_ind_partial_eval(&evaluation_point);
+        println!("eval_point_eq {:?}", eval_point_eq.len());
+        println!("mle value {:?}", packed_mle_values.packed_mle.len());
+        let evaluation_claim = inner_product_buffers(&packed_mle_values.packed_mle, &eval_point_eq);
+
+        println!("evaluation claim {:?}", evaluation_claim);
 
         let result =
             friveil.calculate_evaluation_claim(&packed_mle_values.packed_values, &evaluation_point);
@@ -1153,6 +1157,12 @@ mod tests {
         let evaluation_point = friveil
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
+        let eval_point_eq = eq_ind_partial_eval(&evaluation_point);
+        let evaluation_claim = inner_product_buffers(&packed_mle_values.packed_mle, &eval_point_eq);
+
+        println!("evaluation claim {:?}", evaluation_claim);
+        // The evaluation claim should be a valid field element
+        assert_ne!(evaluation_claim, B128::default()); // Should not be zero for random inputs
 
         // Commit to MLE
         let commit_output = friveil

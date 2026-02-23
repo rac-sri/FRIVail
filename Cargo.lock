@@ -905,6 +905,7 @@ dependencies = [
  "binius-math",
  "binius-transcript",
  "binius-utils",
+ "bumpalo",
  "bytes",
  "digest 0.10.7",
  "getset",
