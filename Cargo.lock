@@ -2152,6 +2152,7 @@ name = "frivail"
 version = "0.2.0"
 dependencies = [
  "binius-field",
+ "binius-iop",
  "binius-math",
  "binius-prover",
  "binius-spartan-prover",

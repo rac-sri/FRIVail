@@ -12,6 +12,7 @@ binius-field = { path = "../binius/binius64/crates/field" }
 binius-transcript = { path = "../binius/binius64/crates/transcript" }
 binius-spartan-prover = { path = "../binius/binius64/crates/spartan-prover" }
 binius-spartan-verifier = { path = "../binius/binius64/crates/spartan-verifier" }
+binius-iop = { path = "../binius/binius64/crates/iop" }
 rand = { version = "0.9.1", default-features = false, features = [
     "std",
     "std_rng",

@@ -20,37 +20,38 @@
 //! ```
 
 use crate::traits::{FriVeilSampling, FriVeilUtils};
-pub use binius_field::PackedField;
 use binius_field::field::FieldOps;
+pub use binius_field::PackedField;
 use binius_field::{ExtensionField, Field, PackedExtension, Random};
+use binius_iop::fri::vcs_optimal_layers_depths_iter;
 use binius_math::{
-    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
     bit_reverse::bit_reverse_packed,
     inner_product::{inner_product, inner_product_buffers},
     multilinear::eq::eq_ind_partial_eval,
     ntt::{
-        AdditiveNTT, NeighborsLastMultiThread,
         domain_context::{self, GenericPreExpanded},
+        AdditiveNTT, NeighborsLastMultiThread,
     },
+    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
 };
 use binius_prover::{
-    fri::CommitOutput,
+    fri::{CommitOutput, FRIQueryProver},
     hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{MerkleTreeProver, prover::BinaryMerkleTreeProver},
+    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
 use binius_spartan_prover::pcs::PCSProver;
 use binius_spartan_verifier::pcs::verify as spartan_verify;
 use binius_transcript::{Buf, ProverTranscript, VerifierTranscript};
 pub use binius_verifier::config::B128;
 use binius_verifier::{
-    config::{B1, StdChallenger},
+    config::{StdChallenger, B1},
     fri::{ConstantArityStrategy, FRIParams},
     hash::{StdCompression, StdDigest},
     merkle_tree::{BinaryMerkleTreeScheme, MerkleTreeScheme},
 };
 
-use itertools::Itertools;
-use rand::{SeedableRng, rngs::StdRng};
+use itertools::{izip, Itertools};
+use rand::{rngs::StdRng, SeedableRng};
 use std::{marker::PhantomData, mem::MaybeUninit};
 use tracing::debug;
 
@@ -306,32 +307,32 @@ where
     ///
     /// # Returns
     ///
-    /// * `Ok(VerifierTranscript)` - Transcript containing the proof
+    /// * `Ok((terminate_codeword, query_prover, transcript_bytes))` - Proof components
     /// * `Err(String)` - Error message if proof generation fails
     ///
     /// # Process
     ///
     /// 1. Initialize prover transcript with commitment
     /// 2. Run FRI protocol to generate proof
-    /// 3. Convert to verifier transcript for verification
+    /// 3. Return query_prover for further operations
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let (transcript, evaluation_claim) = friveil.prove(
+    /// let (terminate_codeword, query_prover, transcript_bytes) = friveil.prove(
     ///     packed_mle,
     ///     fri_params,
     ///     &ntt,
     ///     &commit_output,
     ///     &evaluation_point,
     /// )?;
-    /// ```
-    pub fn prove(
-        &self,
+    /// ``
+    pub fn prove<'b>(
+        &'b self,
         packed_mle: FieldBuffer<P>,
-        fri_params: FRIParams<P::Scalar>,
-        ntt: &NeighborsLastMultiThread<GenericPreExpanded<P::Scalar>>,
-        commit_output: &CommitOutput<
+        fri_params: &'b FRIParams<P::Scalar>,
+        ntt: &'b NeighborsLastMultiThread<GenericPreExpanded<P::Scalar>>,
+        commit_output: &'b CommitOutput<
             P,
             digest::Output<StdDigest>,
             <BinaryMerkleTreeProver<
@@ -341,8 +342,25 @@ where
             > as MerkleTreeProver<P::Scalar>>::Committed,
         >,
         evaluation_point: &[P::Scalar],
-    ) -> Result<(FieldBuffer<P::Scalar>, Vec<u8>), String> {
-        let pcs = PCSProver::new(ntt, &self.merkle_prover, &fri_params);
+    ) -> Result<
+        (
+            FieldBuffer<P::Scalar>,
+            FRIQueryProver<
+                'b,
+                P::Scalar,
+                P,
+                BinaryMerkleTreeProver<
+                    P::Scalar,
+                    StdDigest,
+                    ParallelCompressionAdaptor<StdCompression>,
+                >,
+                BinaryMerkleTreeScheme<P::Scalar, StdDigest, StdCompression>,
+            >,
+            Vec<u8>,
+        ),
+        String,
+    > {
+        let pcs = PCSProver::new(ntt, &self.merkle_prover, fri_params);
 
         let mut prover_transcript = ProverTranscript::new(StdChallenger::default());
 
@@ -353,7 +371,7 @@ where
         let _evaluation_claim = inner_product_buffers(&packed_mle, &eval_point_eq);
 
         // Use prove_with_openings instead of prove
-        let (terminate_codeword, _query_prover) = pcs
+        let (terminate_codeword, query_prover) = pcs
             .prove_with_openings(
                 commit_output.codeword.clone(),
                 &commit_output.committed,
@@ -367,7 +385,7 @@ where
         // Get transcript bytes
         let transcript_bytes = prover_transcript.finalize();
 
-        Ok((terminate_codeword, transcript_bytes))
+        Ok((terminate_codeword, query_prover, transcript_bytes))
     }
 
     /// Encode data using Reed-Solomon code with NTT
@@ -375,12 +393,6 @@ where
     /// This is a helper function to observe NTT encoding behavior outside
     /// the `commit` function. Applies Reed-Solomon encoding to expand data
     /// with redundancy for error correction.
-    ///
-    /// # Arguments
-    ///
-    /// * `data` - Input data to encode
-    /// * `fri_params` - FRI parameters containing Reed-Solomon code configuration
-    /// * `ntt` - NTT instance for efficient encoding
     ///
     /// # Returns
     ///
@@ -414,115 +426,6 @@ where
         encoded.extend_from_slice(encoded_buffer.as_ref());
 
         Ok(encoded)
-    }
-
-    /// Lift elements from a small field to a large extension field
-    ///
-    /// Converts field elements from a base field `F` to an extension field `FE`.
-    /// This is used for efficient computation in the extension field.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `F` - Base field type
-    /// * `FE` - Extension field type (must extend `F`)
-    ///
-    /// # Arguments
-    ///
-    /// * `small_field_elms` - Elements in the base field
-    ///
-    /// # Returns
-    ///
-    /// Vector of elements lifted to the extension field
-    pub fn lift_small_to_large_field<F, FE>(&self, small_field_elms: &[F]) -> Vec<FE>
-    where
-        F: Field,
-        FE: Field + ExtensionField<F>,
-    {
-        small_field_elms.iter().map(|&elm| FE::from(elm)).collect()
-    }
-
-    /// Convert large field MLE to small field MLE representation
-    ///
-    /// Decomposes extension field elements into their base field components.
-    /// This is the inverse operation of `lift_small_to_large_field`.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `F` - Base field type
-    /// * `FE` - Extension field type (must extend `F`)
-    ///
-    /// # Arguments
-    ///
-    /// * `large_field_mle` - MLE in extension field
-    ///
-    /// # Returns
-    ///
-    /// Vector of base field elements (flattened representation)
-    fn large_field_mle_to_small_field_mle<F, FE>(&self, large_field_mle: &[FE]) -> Vec<F>
-    where
-        F: Field,
-        FE: Field + ExtensionField<F>,
-    {
-        large_field_mle
-            .iter()
-            .flat_map(|elm| ExtensionField::<F>::iter_bases(elm))
-            .collect()
-    }
-
-    /// Generate Merkle authentication proof using FRI query prover
-    ///
-    /// Creates a Merkle authentication proof for a specific index using the FRI query prover.
-    /// This method extracts the optimal VCS layers and generates a proof transcript.
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - Position in the codeword to prove
-    /// * `query_prover` - FRI query prover containing the VCS layers and proof data
-    ///
-    /// # Returns
-    ///
-    /// * `Ok((layers, proof_bytes))` - Merkle authentication layers and proof transcript bytes
-    /// * `Err(String)` - Error message if proof generation fails
-    ///
-    /// # Process
-    ///
-    /// 1. Extract optimal VCS layers from query_prover
-    /// 2. Create new transcript for the proof
-    /// 3. Generate proof for specific index using prove_query
-    /// 4. Return layers and transcript bytes
-    pub fn open_with_query_prover(
-        &self,
-        index: usize,
-        query_prover: &binius_prover::fri::FRIQueryProver<
-            'static,
-            P::Scalar,
-            P,
-            BinaryMerkleTreeProver<
-                P::Scalar,
-                StdDigest,
-                ParallelCompressionAdaptor<StdCompression>,
-            >,
-            BinaryMerkleTreeScheme<P::Scalar, StdDigest, StdCompression>,
-        >,
-    ) -> Result<(Vec<Vec<digest::Output<StdDigest>>>, Vec<u8>), String> {
-        // Get layers from query_prover
-        let layers = query_prover
-            .vcs_optimal_layers()
-            .map_err(|e| e.to_string())?;
-
-        // Create new transcript for the proof
-        let mut proof_transcript = ProverTranscript::new(StdChallenger::default());
-        let mut advice = proof_transcript.decommitment();
-
-        // Generate proof for specific index
-        query_prover
-            .prove_query(index, &mut advice)
-            .map_err(|e| e.to_string())?;
-
-        // Get transcript bytes
-        let proof_bytes = proof_transcript.finalize();
-
-        Ok((layers, proof_bytes))
     }
 }
 
@@ -668,6 +571,11 @@ where
         evaluation_claim: P::Scalar,
         evaluation_point: &[P::Scalar],
         fri_params: &FRIParams<P::Scalar>,
+        ntt: &NTT,
+        extra_index: Option<usize>,
+        terminate_codeword: Option<&[P::Scalar]>,
+        layers: Option<&[Vec<digest::Output<StdDigest>>]>,
+        extra_transcript: Option<&mut VerifierTranscript<StdChallenger>>,
     ) -> Result<(), String> {
         // Extract commitment from transcript
         let retrieved_codeword_commitment = verifier_transcript
@@ -692,7 +600,32 @@ where
         .map_err(|e| e.to_string())?;
 
         // Get the verifier from arena (demonstrates the verifier_with_arena pattern)
-        let _verifier = verifier_with_arena.verifier();
+        let verifier = verifier_with_arena.verifier();
+
+        // If extra parameters provided, perform extra query verification
+        if let (Some(idx), Some(codeword), Some(layers), Some(extra_transcript)) =
+            (extra_index, terminate_codeword, layers, extra_transcript)
+        {
+            // Verify layers match commitments using vcs_optimal_layers_depths_iter
+            for (commitment, layer_depth, layer) in izip!(
+                std::iter::once(verifier.codeword_commitment).chain(verifier.round_commitments),
+                vcs_optimal_layers_depths_iter(verifier.params, verifier.vcs),
+                layers
+            ) {
+                verifier
+                    .vcs
+                    .verify_layer(commitment, layer_depth, layer)
+                    .map_err(|e| e.to_string())?;
+            }
+
+            // Create advice reader from extra transcript for query verification
+            let mut advice = extra_transcript.decommitment();
+
+            // Verify the extra query proof
+            verifier
+                .verify_query(idx, ntt, codeword, layers, &mut advice)
+                .map_err(|e| e.to_string())?;
+        }
 
         Ok(())
     }
@@ -736,44 +669,36 @@ where
         Ok(proof_reader)
     }
 
-    /// Generate a Merkle authentication transcript for opening a specific index
+    /// Open a commitment at a specific index using FRI query prover
     ///
-    /// Creates a Merkle authentication path (transcript) that proves a value
-    /// at a specific index is correctly committed in the Merkle tree.
-    /// This is a public wrapper around `inclusion_proof()` with a cleaner API.
-    ///
-    /// # Arguments
-    ///
-    /// * `committed` - Merkle tree commitment structure
-    /// * `index` - Position in the codeword to open
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(VerifierTranscript)` - Transcript containing the Merkle authentication path
-    /// * `Err(String)` - Error generating the transcript
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let transcript = friveil.open(&commit_output.committed, 42)?;
-    /// ```
-    fn open(
+    /// Generates a query proof at the specified index using the FRI query prover.
+    /// This creates a separate transcript with the proof data for the given index.
+    fn open<'b>(
         &self,
         index: usize,
-        committed: &<BinaryMerkleTreeProver<
+        query_prover: &binius_prover::fri::FRIQueryProver<
+            'b,
             P::Scalar,
-            StdDigest,
-            ParallelCompressionAdaptor<StdCompression>,
-        > as MerkleTreeProver<P::Scalar>>::Committed,
+            P,
+            BinaryMerkleTreeProver<
+                P::Scalar,
+                StdDigest,
+                ParallelCompressionAdaptor<StdCompression>,
+            >,
+            BinaryMerkleTreeScheme<P::Scalar, StdDigest, StdCompression>,
+        >,
     ) -> Result<VerifierTranscript<StdChallenger>, String> {
-        let mut proof_writer = ProverTranscript::new(StdChallenger::default());
-        self.merkle_prover
-            .prove_opening(committed, 0, index, &mut proof_writer.message())
+        // Create new transcript for the query proof
+        let mut proof_transcript = ProverTranscript::new(StdChallenger::default());
+        let mut advice = proof_transcript.decommitment();
+
+        // Generate proof for specific index
+        query_prover
+            .prove_query(index, &mut advice)
             .map_err(|e| e.to_string())?;
 
-        let proof_reader = proof_writer.into_verifier();
-
-        Ok(proof_reader)
+        // Return verifier transcript
+        Ok(proof_transcript.into_verifier())
     }
 
     /// Verify a Merkle inclusion proof for a codeword value
@@ -1058,10 +983,9 @@ mod tests {
     use super::*;
 
     use crate::poly::Utils;
-    use binius_field::Field;
-    use binius_math::ntt::{NeighborsLastMultiThread, domain_context::GenericPreExpanded};
+    use binius_math::ntt::{domain_context::GenericPreExpanded, NeighborsLastMultiThread};
     use binius_verifier::{
-        config::{B1, B128},
+        config::B128,
         hash::{StdCompression, StdDigest},
         merkle_tree::BinaryMerkleTreeScheme,
     };
@@ -1108,27 +1032,6 @@ mod tests {
         assert!(result2.is_ok());
         let evaluation_point2 = result2.unwrap();
         assert_eq!(evaluation_point, evaluation_point2);
-    }
-
-    #[test]
-    fn test_field_conversion_methods() {
-        let friveil = TestFriVeil::new(1, 3, 8, 2);
-
-        // Test small to large field conversion
-        let small_field_values: Vec<B1> = vec![B1::ZERO, B1::ONE, B1::ZERO, B1::ONE];
-        let large_field_values: Vec<B128> = friveil.lift_small_to_large_field(&small_field_values);
-
-        assert_eq!(large_field_values.len(), small_field_values.len());
-        assert_eq!(large_field_values[0], B128::from(B1::ZERO));
-        assert_eq!(large_field_values[1], B128::from(B1::ONE));
-
-        // Test large to small field conversion
-        let test_large_values: Vec<B128> = vec![B128::from(42u128), B128::from(100u128)];
-        let converted_small: Vec<B1> =
-            friveil.large_field_mle_to_small_field_mle(&test_large_values);
-
-        // Each B128 should expand to 128 B1 elements
-        assert_eq!(converted_small.len(), test_large_values.len() * 128);
     }
 
     #[test]
@@ -1236,9 +1139,26 @@ mod tests {
         assert!(!commit_output.commitment.is_empty());
         assert!(commit_output.codeword.len() > 0);
 
-        // Test that open() method works
+        // Generate evaluation point for prove
+        let evaluation_point = friveil
+            .calculate_evaluation_point_random()
+            .expect("Failed to generate evaluation point");
+
+        // Generate proof to get query_prover
+        let prove_result = friveil.prove(
+            packed_mle_values.packed_mle.clone(),
+            &fri_params,
+            &ntt,
+            &commit_output,
+            &evaluation_point,
+        );
+        assert!(prove_result.is_ok());
+
+        let (_, query_prover, _) = prove_result.unwrap();
+
+        // Test that open() method works with query_prover
         for i in 0..std::cmp::min(5, commit_output.codeword.len()) {
-            let open_result = friveil.open(i, &commit_output.committed);
+            let open_result = friveil.open(i, &query_prover);
             assert!(open_result.is_ok(), "open() method failed for index {}", i);
         }
     }
@@ -1310,14 +1230,19 @@ mod tests {
         // Generate proof
         let prove_result = friveil.prove(
             packed_mle_values.packed_mle.clone(),
-            fri_params.clone(),
+            &fri_params,
             &ntt,
             &commit_output,
             &evaluation_point,
         );
         assert!(prove_result.is_ok());
 
-        let (_terminate_codeword, transcript_bytes) = prove_result.unwrap();
+        let (terminate_codeword, query_prover, transcript_bytes) = prove_result.unwrap();
+
+        // Extract layers directly from query_prover
+        let layers = query_prover
+            .vcs_optimal_layers()
+            .expect("Failed to get layers");
 
         // Reconstruct verifier transcript from bytes
         let mut verifier_transcript =
@@ -1327,12 +1252,25 @@ mod tests {
         let eval_point_eq = eq_ind_partial_eval(&evaluation_point);
         let evaluation_claim = inner_product_buffers(&packed_mle_values.packed_mle, &eval_point_eq);
 
-        // Verify proof
+        // Convert terminate_codeword to vector of scalars
+        let terminate_codeword_vec: Vec<_> = terminate_codeword.iter_scalars().collect();
+
+        // Generate extra query proof using open()
+        let mut extra_transcript = friveil
+            .open(0, &query_prover)
+            .expect("Failed to generate extra query proof");
+
+        // Verify proof with extra parameters
         let verify_result = friveil.verify(
             &mut verifier_transcript,
             evaluation_claim,
             &evaluation_point,
             &fri_params,
+            &ntt,                          // ntt instance
+            Some(0),                       // extra_index - use 0 for testing
+            Some(&terminate_codeword_vec), // terminate_codeword
+            Some(&layers),                 // layers
+            Some(&mut extra_transcript),   // extra query transcript
         );
         assert!(
             verify_result.is_ok(),
@@ -1365,10 +1303,10 @@ mod tests {
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
 
-        let (_terminate_codeword, transcript_bytes) = friveil
+        let (_terminate_codeword, _query_prover, transcript_bytes) = friveil
             .prove(
                 packed_mle_values.packed_mle.clone(),
-                fri_params.clone(),
+                &fri_params,
                 &ntt,
                 &commit_output,
                 &evaluation_point,
@@ -1387,6 +1325,11 @@ mod tests {
             wrong_evaluation_claim,
             &evaluation_point,
             &fri_params,
+            &ntt, // ntt instance
+            None,
+            None,
+            None,
+            None, // no extra transcript
         );
 
         // Verification should fail with wrong claim
@@ -1399,7 +1342,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_data_availability_sampling() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
         use tracing::Level;
 
         // Initialize logging for the test
@@ -1517,7 +1460,7 @@ mod tests {
 
     #[test]
     fn test_error_correction_reconstruction() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 
         // Create test data
         let test_data = create_test_data(2048);
