@@ -1,10 +1,10 @@
 use divan::Bencher;
-use frivail::{friveil::FriVeilDefault, poly::Utils};
+use frivail::{frivail::FriVeilDefault, poly::Utils};
 #[cfg(feature = "kzg")]
 use kate::{
-    M1NoPrecomp,
     couscous::multiproof_params,
     gridgen::core::{AsBytes, EvaluationGrid},
+    M1NoPrecomp,
 };
 use rand::Rng;
 
@@ -103,7 +103,7 @@ fn fri_commitments_32mib_redundancy_factor_2(bencher: Bencher) {
         let packed_mle_values = Utils::new()
             .bytes_to_packed_mle(&random_data)
             .expect("Data should be convertible to packed MLE values");
-        let friveil = FriVeilDefault::new(1, 100, packed_mle_values.total_n_vars, 3);
+        let friveil = FriVeilDefault::new(1, 100, 4, packed_mle_values.total_n_vars, 3);
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("FRI context should initialize successfully");

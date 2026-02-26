@@ -22,7 +22,7 @@
 use crate::traits::{FriVeilSampling, FriVeilUtils};
 use binius_field::field::FieldOps;
 pub use binius_field::PackedField;
-use binius_field::{ Field, PackedExtension, Random};
+use binius_field::{Field, PackedExtension, Random};
 use binius_iop::fri::vcs_optimal_layers_depths_iter;
 use binius_math::{
     bit_reverse::bit_reverse_packed,
@@ -95,6 +95,7 @@ where
         BinaryMerkleTreeProver<P::Scalar, StdDigest, ParallelCompressionAdaptor<StdCompression>>,
     log_inv_rate: usize,
     num_test_queries: usize,
+    arity: usize,
     n_vars: usize,
     log_num_shares: usize,
     _vcs: PhantomData<VCS>,
@@ -115,11 +116,13 @@ where
     ///   - 2 means 4x expansion (75% redundancy)
     /// * `num_test_queries` - Number of FRI test queries (security parameter)
     ///   - Typical values: 64-128 for good security
+    /// * `arity` - Folding arity for FRI layers
     /// * `n_vars` - Number of variables in the multilinear polynomial
     /// * `log_num_shares` - Logarithm of Merkle tree shares
     pub fn new(
         log_inv_rate: usize,
         num_test_queries: usize,
+        arity: usize,
         n_vars: usize,
         log_num_shares: usize,
     ) -> Self {
@@ -129,6 +132,7 @@ where
             ),
             log_inv_rate,
             num_test_queries,
+            arity,
             n_vars,
             log_num_shares,
             _ntt: PhantomData,
@@ -173,10 +177,11 @@ where
             &ntt,
             self.merkle_prover.scheme(),
             packed_buffer_log_len,
-            None,
+            Some(0), // hardcoded to 0, DAS doesn't need the data to be clubbed
+            // into cosets
             self.log_inv_rate,
             self.num_test_queries,
-            &ConstantArityStrategy::new(2),
+            &ConstantArityStrategy::new(self.arity),
         )
         .map_err(|e| e.to_string())?;
 
@@ -1008,7 +1013,7 @@ mod tests {
         const N_VARS: usize = 10;
         const LOG_NUM_SHARES: usize = 2;
 
-        let friveil = TestFriVeil::new(LOG_INV_RATE, NUM_TEST_QUERIES, N_VARS, LOG_NUM_SHARES);
+        let friveil = TestFriVeil::new(LOG_INV_RATE, NUM_TEST_QUERIES, 2, N_VARS, LOG_NUM_SHARES);
 
         assert_eq!(friveil.log_inv_rate, LOG_INV_RATE);
         assert_eq!(friveil.num_test_queries, NUM_TEST_QUERIES);
@@ -1019,7 +1024,7 @@ mod tests {
     #[test]
     fn test_calculate_evaluation_point_random() {
         const N_VARS: usize = 8;
-        let friveil = TestFriVeil::new(1, 3, N_VARS, 2);
+        let friveil = TestFriVeil::new(1, 3, 2, N_VARS, 2);
 
         let result = friveil.calculate_evaluation_point_random();
         assert!(result.is_ok());
@@ -1036,7 +1041,7 @@ mod tests {
 
     #[test]
     fn test_initialize_fri_context() {
-        let friveil = TestFriVeil::new(1, 3, 12, 2);
+        let friveil = TestFriVeil::new(1, 3, 2, 12, 2);
 
         // Create test data
         let test_data = create_test_data(1024); // 1KB test data
@@ -1063,7 +1068,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 2);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
@@ -1121,7 +1126,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 2);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
@@ -1170,7 +1175,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
         let evaluation_point = friveil
             .calculate_evaluation_point_random()
@@ -1201,7 +1206,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
         // Initialize FRI context
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
@@ -1286,7 +1291,7 @@ mod tests {
         let packed_mle_values = Utils::<B128>::new()
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
@@ -1356,7 +1361,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 2);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
         // Initialize FRI context
         let (fri_params, ntt) = friveil
@@ -1372,6 +1377,11 @@ mod tests {
             )
             .expect("Failed to commit");
 
+        println!(
+            "commit output codeword len {:?}",
+            commit_output.codeword.len()
+        );
+
         let total_samples = commit_output.codeword.len();
         let sample_size = std::cmp::min(5, total_samples / 4); // Limit to 5 samples or 1/4 of total
         let indices =
@@ -1386,6 +1396,7 @@ mod tests {
         let mut failed_samples = Vec::new();
 
         for &sample_index in indices.iter() {
+            println!("sample index {sample_index}");
             match friveil.inclusion_proof(&commit_output.committed, sample_index) {
                 Ok(mut inclusion_proof) => {
                     let value = commit_output.codeword[sample_index];
@@ -1431,7 +1442,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
         // Initialize FRI context
         let (fri_params, ntt) = friveil
@@ -1467,7 +1478,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
         // Initialize FRI context
         let (fri_params, ntt) = friveil

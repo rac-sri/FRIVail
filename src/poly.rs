@@ -31,7 +31,7 @@ where
     P::Scalar: From<u128> + ExtensionField<B1>,
 {
     /// Packed field buffer optimized for polynomial operations (scalar representation)
-    pub packed_mle: FieldBuffer<P::Scalar>,
+    pub packed_mle: FieldBuffer<P>,
     /// Unpacked scalar values for easier access and verification
     pub packed_values: Vec<P::Scalar>,
     /// Total number of variables in the multilinear extension
@@ -113,19 +113,11 @@ where
             values
         };
 
-        println!("packed size {:?}", packed_size);
         // Pad with zeros to reach power-of-2 size
         packed_values.resize(packed_size, P::Scalar::zero());
 
-        // Calculate total number of variables before consuming packed_values
-        let total_n_vars = big_field_n_vars;
-
-        // Create FieldBuffer from scalar values
-        // This provides efficient access patterns for polynomial operations
-        let packed_mle =
-            FieldBuffer::new(big_field_n_vars, packed_values.clone().into_boxed_slice());
-
-        println!("packed mle len {:?}", packed_mle.len());
+        let packed_mle = FieldBuffer::<P>::from_values(packed_values.as_slice());
+        let total_n_vars = packed_mle.log_len();
 
         Ok(PackedMLE::<P> {
             packed_mle,
