@@ -20,38 +20,38 @@
 //! ```
 
 use crate::traits::{FriVeilSampling, FriVeilUtils};
-pub use binius_field::PackedField;
 use binius_field::field::FieldOps;
+pub use binius_field::PackedField;
 use binius_field::{Field, PackedExtension, Random};
 use binius_iop::fri::vcs_optimal_layers_depths_iter;
 use binius_math::{
-    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
     bit_reverse::bit_reverse_packed,
     inner_product::{inner_product, inner_product_buffers},
     multilinear::eq::eq_ind_partial_eval,
     ntt::{
-        AdditiveNTT, NeighborsLastMultiThread,
         domain_context::{self, GenericPreExpanded},
+        AdditiveNTT, NeighborsLastMultiThread,
     },
+    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
 };
 use binius_prover::{
     fri::{CommitOutput, FRIQueryProver},
     hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{MerkleTreeProver, prover::BinaryMerkleTreeProver},
+    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
 use binius_spartan_prover::pcs::PCSProver;
 use binius_spartan_verifier::pcs::verify as spartan_verify;
 use binius_transcript::{Buf, ProverTranscript, VerifierTranscript};
 pub use binius_verifier::config::B128;
 use binius_verifier::{
-    config::{B1, StdChallenger},
+    config::{StdChallenger, B1},
     fri::{ConstantArityStrategy, FRIParams},
     hash::{StdCompression, StdDigest},
     merkle_tree::{BinaryMerkleTreeScheme, MerkleTreeScheme},
 };
 
-use itertools::{Itertools, izip};
-use rand::{SeedableRng, rngs::StdRng};
+use itertools::{izip, Itertools};
+use rand::{rngs::StdRng, SeedableRng};
 use std::{marker::PhantomData, mem::MaybeUninit};
 use tracing::debug;
 
@@ -95,6 +95,7 @@ where
         BinaryMerkleTreeProver<P::Scalar, StdDigest, ParallelCompressionAdaptor<StdCompression>>,
     log_inv_rate: usize,
     num_test_queries: usize,
+    arity: usize,
     n_vars: usize,
     log_num_shares: usize,
     _vcs: PhantomData<VCS>,
@@ -115,11 +116,13 @@ where
     ///   - 2 means 4x expansion (75% redundancy)
     /// * `num_test_queries` - Number of FRI test queries (security parameter)
     ///   - Typical values: 64-128 for good security
+    /// * `arity` - Folding arity for FRI layers
     /// * `n_vars` - Number of variables in the multilinear polynomial
     /// * `log_num_shares` - Logarithm of Merkle tree shares
     pub fn new(
         log_inv_rate: usize,
         num_test_queries: usize,
+        arity: usize,
         n_vars: usize,
         log_num_shares: usize,
     ) -> Self {
@@ -129,6 +132,7 @@ where
             ),
             log_inv_rate,
             num_test_queries,
+            arity,
             n_vars,
             log_num_shares,
             _ntt: PhantomData,
@@ -173,10 +177,11 @@ where
             &ntt,
             self.merkle_prover.scheme(),
             packed_buffer_log_len,
-            Some(0),
+            Some(0), // hardcoded to 0, DAS doesn't need the data to be clubbed
+            // into cosets
             self.log_inv_rate,
             self.num_test_queries,
-            &ConstantArityStrategy::new(22),
+            &ConstantArityStrategy::new(self.arity),
         )
         .map_err(|e| e.to_string())?;
 
@@ -983,7 +988,7 @@ mod tests {
     use super::*;
 
     use crate::poly::Utils;
-    use binius_math::ntt::{NeighborsLastMultiThread, domain_context::GenericPreExpanded};
+    use binius_math::ntt::{domain_context::GenericPreExpanded, NeighborsLastMultiThread};
     use binius_verifier::{
         config::B128,
         hash::{StdCompression, StdDigest},
@@ -1008,7 +1013,7 @@ mod tests {
         const N_VARS: usize = 10;
         const LOG_NUM_SHARES: usize = 2;
 
-        let friveil = TestFriVeil::new(LOG_INV_RATE, NUM_TEST_QUERIES, N_VARS, LOG_NUM_SHARES);
+        let friveil = TestFriVeil::new(LOG_INV_RATE, NUM_TEST_QUERIES, 2, N_VARS, LOG_NUM_SHARES);
 
         assert_eq!(friveil.log_inv_rate, LOG_INV_RATE);
         assert_eq!(friveil.num_test_queries, NUM_TEST_QUERIES);
@@ -1019,7 +1024,7 @@ mod tests {
     #[test]
     fn test_calculate_evaluation_point_random() {
         const N_VARS: usize = 8;
-        let friveil = TestFriVeil::new(1, 3, N_VARS, 2);
+        let friveil = TestFriVeil::new(1, 3, 2, N_VARS, 2);
 
         let result = friveil.calculate_evaluation_point_random();
         assert!(result.is_ok());
@@ -1036,7 +1041,7 @@ mod tests {
 
     #[test]
     fn test_initialize_fri_context() {
-        let friveil = TestFriVeil::new(1, 3, 12, 2);
+        let friveil = TestFriVeil::new(1, 3, 2, 12, 2);
 
         // Create test data
         let test_data = create_test_data(1024); // 1KB test data
@@ -1063,7 +1068,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 2);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
@@ -1121,7 +1126,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 2);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
@@ -1170,7 +1175,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
         let evaluation_point = friveil
             .calculate_evaluation_point_random()
@@ -1201,7 +1206,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
         // Initialize FRI context
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
@@ -1286,7 +1291,7 @@ mod tests {
         let packed_mle_values = Utils::<B128>::new()
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
         let (fri_params, ntt) = friveil
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
@@ -1341,7 +1346,7 @@ mod tests {
 
     #[test]
     fn test_data_availability_sampling() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
         use tracing::Level;
 
         // Initialize logging for the test
@@ -1356,7 +1361,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 2);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
         // Initialize FRI context
         let (fri_params, ntt) = friveil
@@ -1437,7 +1442,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
         // Initialize FRI context
         let (fri_params, ntt) = friveil
@@ -1465,7 +1470,7 @@ mod tests {
 
     #[test]
     fn test_error_correction_reconstruction() {
-        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 
         // Create test data
         let test_data = create_test_data(2048);
@@ -1473,7 +1478,7 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, packed_mle_values.packed_mle.log_len(), 3);
+        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
         // Initialize FRI context
         let (fri_params, ntt) = friveil

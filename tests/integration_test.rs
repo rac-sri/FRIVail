@@ -2,13 +2,13 @@ use binius_field::field::FieldOps;
 use binius_transcript::VerifierTranscript;
 use binius_verifier::config::StdChallenger;
 use frivail::{
-    frivail::{B128, FriVeilDefault},
+    frivail::{FriVeilDefault, B128},
     poly::Utils,
     traits::FriVeilSampling,
 };
-use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
+use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 use std::time::Instant;
-use tracing::{Level, debug, error, info, span, warn};
+use tracing::{debug, error, info, span, warn, Level};
 
 #[test]
 fn test_integration_main() {
@@ -77,6 +77,7 @@ fn test_integration_main() {
     let friveil = FriVeilDefault::new(
         LOG_INV_RATE,
         NUM_TEST_QUERIES,
+        4,
         packed_mle_values.total_n_vars,
         80, // log_num_shares
     );
