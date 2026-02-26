@@ -20,38 +20,38 @@
 //! ```
 
 use crate::traits::{FriVeilSampling, FriVeilUtils};
-use binius_field::field::FieldOps;
 pub use binius_field::PackedField;
-use binius_field::{ Field, PackedExtension, Random};
+use binius_field::field::FieldOps;
+use binius_field::{Field, PackedExtension, Random};
 use binius_iop::fri::vcs_optimal_layers_depths_iter;
 use binius_math::{
+    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
     bit_reverse::bit_reverse_packed,
     inner_product::{inner_product, inner_product_buffers},
     multilinear::eq::eq_ind_partial_eval,
     ntt::{
-        domain_context::{self, GenericPreExpanded},
         AdditiveNTT, NeighborsLastMultiThread,
+        domain_context::{self, GenericPreExpanded},
     },
-    BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
 };
 use binius_prover::{
     fri::{CommitOutput, FRIQueryProver},
     hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
+    merkle_tree::{MerkleTreeProver, prover::BinaryMerkleTreeProver},
 };
 use binius_spartan_prover::pcs::PCSProver;
 use binius_spartan_verifier::pcs::verify as spartan_verify;
 use binius_transcript::{Buf, ProverTranscript, VerifierTranscript};
 pub use binius_verifier::config::B128;
 use binius_verifier::{
-    config::{StdChallenger, B1},
+    config::{B1, StdChallenger},
     fri::{ConstantArityStrategy, FRIParams},
     hash::{StdCompression, StdDigest},
     merkle_tree::{BinaryMerkleTreeScheme, MerkleTreeScheme},
 };
 
-use itertools::{izip, Itertools};
-use rand::{rngs::StdRng, SeedableRng};
+use itertools::{Itertools, izip};
+use rand::{SeedableRng, rngs::StdRng};
 use std::{marker::PhantomData, mem::MaybeUninit};
 use tracing::debug;
 
@@ -173,10 +173,10 @@ where
             &ntt,
             self.merkle_prover.scheme(),
             packed_buffer_log_len,
-            None,
+            Some(0),
             self.log_inv_rate,
             self.num_test_queries,
-            &ConstantArityStrategy::new(2),
+            &ConstantArityStrategy::new(22),
         )
         .map_err(|e| e.to_string())?;
 
@@ -983,7 +983,7 @@ mod tests {
     use super::*;
 
     use crate::poly::Utils;
-    use binius_math::ntt::{domain_context::GenericPreExpanded, NeighborsLastMultiThread};
+    use binius_math::ntt::{NeighborsLastMultiThread, domain_context::GenericPreExpanded};
     use binius_verifier::{
         config::B128,
         hash::{StdCompression, StdDigest},
@@ -1341,7 +1341,7 @@ mod tests {
 
     #[test]
     fn test_data_availability_sampling() {
-        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
+        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
         use tracing::Level;
 
         // Initialize logging for the test
@@ -1372,6 +1372,11 @@ mod tests {
             )
             .expect("Failed to commit");
 
+        println!(
+            "commit output codeword len {:?}",
+            commit_output.codeword.len()
+        );
+
         let total_samples = commit_output.codeword.len();
         let sample_size = std::cmp::min(5, total_samples / 4); // Limit to 5 samples or 1/4 of total
         let indices =
@@ -1386,6 +1391,7 @@ mod tests {
         let mut failed_samples = Vec::new();
 
         for &sample_index in indices.iter() {
+            println!("sample index {sample_index}");
             match friveil.inclusion_proof(&commit_output.committed, sample_index) {
                 Ok(mut inclusion_proof) => {
                     let value = commit_output.codeword[sample_index];
@@ -1459,7 +1465,7 @@ mod tests {
 
     #[test]
     fn test_error_correction_reconstruction() {
-        use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
+        use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
 
         // Create test data
         let test_data = create_test_data(2048);
