@@ -445,6 +445,29 @@ where
 
         Ok(encoded)
     }
+
+    /// Compute Lagrange interpolation at a specific point
+    fn interpolate_at_point(
+        &self,
+        x_e: P::Scalar,
+        known: &[(P::Scalar, P::Scalar)],
+        k: usize,
+    ) -> P::Scalar {
+        let mut value = P::Scalar::zero();
+        for j in 0..k {
+            let (x_j, y_j) = known[j];
+            let mut l_j = P::Scalar::ONE;
+            for m in 0..k {
+                if m == j {
+                    continue;
+                }
+                let (x_m, _) = known[m];
+                l_j = l_j * (x_e - x_m) * (x_j - x_m).invert().unwrap();
+            }
+            value = value + y_j * l_j;
+        }
+        value
+    }
 }
 
 impl<'a, P, VCS, NTT> FriVeilSampling<P, NTT> for FriVeil<'a, P, VCS, NTT>
@@ -492,24 +515,7 @@ where
                 .map(|&missing| {
                     debug!("Calculating value for missing index: {}", missing);
                     let x_e = domain[missing];
-
-                    let mut value = P::Scalar::zero();
-
-                    for j in 0..k {
-                        let (x_j, y_j) = known[j];
-
-                        // Compute L_j(x_e)
-                        let mut l_j = P::Scalar::ONE;
-                        for m in 0..k {
-                            if m == j {
-                                continue;
-                            }
-                            let (x_m, _) = known[m];
-                            l_j = l_j * (x_e - x_m) * (x_j - x_m).invert().unwrap();
-                        }
-
-                        value = value + y_j * l_j;
-                    }
+                    let value = self.interpolate_at_point(x_e, &known, k);
 
                     debug!(
                         "Reconstructed value for missing index {}: {:?}",
@@ -531,24 +537,7 @@ where
             for &missing in corrupted_indices {
                 debug!("Calculating value for missing index: {}", missing);
                 let x_e = domain[missing];
-
-                let mut value = P::Scalar::zero();
-
-                for j in 0..k {
-                    let (x_j, y_j) = known[j];
-
-                    // Compute L_j(x_e)
-                    let mut l_j = P::Scalar::ONE;
-                    for m in 0..k {
-                        if m == j {
-                            continue;
-                        }
-                        let (x_m, _) = known[m];
-                        l_j = l_j * (x_e - x_m) * (x_j - x_m).invert().unwrap();
-                    }
-
-                    value = value + y_j * l_j;
-                }
+                let value = self.interpolate_at_point(x_e, &known, k);
 
                 debug!(
                     "Reconstructed value for missing index {}: {:?}",
