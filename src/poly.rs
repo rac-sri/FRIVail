@@ -33,6 +33,9 @@ where
     P::Scalar: From<u128> + ExtensionField<B1>,
 {
     /// Create a new utility instance
+    ///
+    /// # Returns
+    /// New Utils instance
     pub fn new() -> Self {
         Self { _p: PhantomData }
     }
@@ -45,6 +48,15 @@ where
     }
 
     /// Convert raw bytes to a packed multilinear extension
+    ///
+    /// # Arguments
+    /// * `data` - Raw bytes to convert
+    ///
+    /// # Returns
+    /// Packed multilinear extension representation
+    ///
+    /// # Errors
+    /// When conversion fails
     pub fn bytes_to_packed_mle(&self, data: &[u8]) -> Result<PackedMLE<P>, String> {
         let num_elements = data.len().div_ceil(BITS_PER_ELEMENT);
 

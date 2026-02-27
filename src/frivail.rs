@@ -65,6 +65,16 @@ where
     NTT: AdditiveNTT<Field = B128> + Sync,
 {
     /// Create a new FRI-Vail instance
+    ///
+    /// # Arguments
+    /// * `log_inv_rate` - Logarithm of inverse rate for Reed-Solomon encoding
+    /// * `num_test_queries` - Number of test queries for FRI protocol (security parameter)
+    /// * `arity` - Arity for FRI folding strategy
+    /// * `n_vars` - Number of variables for multilinear extension
+    /// * `log_num_shares` - Logarithm of number of shares for Merkle tree
+    ///
+    /// # Returns
+    /// New FriVail instance
     pub fn new(
         log_inv_rate: usize,
         num_test_queries: usize,
@@ -87,6 +97,15 @@ where
     }
 
     /// Initialize FRI protocol context and NTT for Reed-Solomon encoding
+    ///
+    /// # Arguments
+    /// * `packed_buffer_log_len` - Logarithm of packed buffer length
+    ///
+    /// # Returns
+    /// Tuple containing FRI parameters and NTT instance
+    ///
+    /// # Errors
+    /// When FRI parameter initialization fails
     pub fn initialize_fri_context(
         &self,
         packed_buffer_log_len: usize,
@@ -121,6 +140,12 @@ where
     }
 
     /// Generate a random evaluation point for polynomial evaluation
+    ///
+    /// # Returns
+    /// Vector of random field elements representing the evaluation point
+    ///
+    /// # Errors
+    /// When random number generation fails
     pub fn calculate_evaluation_point_random(&self) -> FieldResult<P> {
         let mut rng = StdRng::from_seed([0; 32]);
         let evaluation_point: Vec<P::Scalar> = (0..self.n_vars)
@@ -130,6 +155,16 @@ where
     }
 
     /// Calculate the evaluation claim for a polynomial at a given point
+    ///
+    /// # Arguments
+    /// * `values` - Polynomial values to evaluate
+    /// * `evaluation_point` - Point at which to evaluate the polynomial
+    ///
+    /// # Returns
+    /// Evaluation claim (inner product result)
+    ///
+    /// # Errors
+    /// When evaluation calculation fails
     pub fn calculate_evaluation_claim(
         &self,
         values: &[P::Scalar],
@@ -149,6 +184,17 @@ where
     }
 
     /// Generate a polynomial commitment and codeword
+    ///
+    /// # Arguments
+    /// * `packed_mle` - Packed multilinear extension to commit to
+    /// * `fri_params` - FRI protocol parameters
+    /// * `ntt` - Number Theoretic Transform instance
+    ///
+    /// # Returns
+    /// Commitment output containing commitment and codeword
+    ///
+    /// # Errors
+    /// When commitment generation fails
     pub fn commit(
         &self,
         packed_mle: FieldBuffer<P>,
@@ -160,6 +206,19 @@ where
     }
 
     /// Generate an evaluation proof for the committed polynomial
+    ///
+    /// # Arguments
+    /// * `packed_mle` - Packed multilinear extension
+    /// * `fri_params` - FRI protocol parameters
+    /// * `ntt` - Number Theoretic Transform instance
+    /// * `commit_output` - Previous commitment output
+    /// * `evaluation_point` - Point at which to evaluate the polynomial
+    ///
+    /// # Returns
+    /// Tuple containing terminal codeword, query prover, and transcript bytes
+    ///
+    /// # Errors
+    /// When proof generation fails
     pub fn prove<'b>(
         &'b self,
         packed_mle: FieldBuffer<P>,
@@ -253,6 +312,16 @@ where
     VCS: MerkleTreeScheme<P::Scalar>,
 {
     /// Decode a Reed-Solomon codeword with error correction for missing points
+    ///
+    /// # Arguments
+    /// * `corrupted_codeword` - Mutable reference to the corrupted codeword to reconstruct
+    /// * `corrupted_indices` - Indices of corrupted elements in the codeword
+    ///
+    /// # Returns
+    /// Ok(()) if reconstruction succeeds
+    ///
+    /// # Errors
+    /// When no known points are available for reconstruction
     fn reconstruct_codeword_naive(
         &self,
         corrupted_codeword: &mut [P::Scalar],
@@ -322,6 +391,23 @@ where
     }
 
     /// Verify an evaluation proof for the committed polynomial
+    ///
+    /// # Arguments
+    /// * `verifier_transcript` - Verifier transcript containing the proof
+    /// * `evaluation_claim` - Claimed evaluation result
+    /// * `evaluation_point` - Point at which polynomial was evaluated
+    /// * `fri_params` - FRI protocol parameters
+    /// * `ntt` - Number Theoretic Transform instance
+    /// * `extra_index` - Optional index for extra query verification
+    /// * `terminate_codeword` - Optional terminal codeword for verification
+    /// * `layers` - Optional Merkle tree layers for verification
+    /// * `extra_transcript` - Optional extra transcript for query verification
+    ///
+    /// # Returns
+    /// Ok(()) if verification succeeds
+    ///
+    /// # Errors
+    /// When verification fails due to invalid proof or parameters
     fn verify(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
@@ -388,6 +474,16 @@ where
     }
 
     /// Generate a Merkle inclusion proof for a specific codeword position
+    ///
+    /// # Arguments
+    /// * `committed` - Committed Merkle tree
+    /// * `index` - Index in the codeword to generate proof for
+    ///
+    /// # Returns
+    /// Verifier transcript containing the inclusion proof
+    ///
+    /// # Errors
+    /// When proof generation fails
     fn inclusion_proof(
         &self,
         committed: &<MerkleProver<P> as MerkleTreeProver<<P as PackedField>::Scalar>>::Committed,
@@ -404,6 +500,16 @@ where
     }
 
     /// Open a commitment at a specific index using FRI query prover
+    ///
+    /// # Arguments
+    /// * `index` - Index in the codeword to open
+    /// * `query_prover` - FRI query prover instance
+    ///
+    /// # Returns
+    /// Verifier transcript containing the opening proof
+    ///
+    /// # Errors
+    /// When opening fails
     fn open<'b>(
         &self,
         index: usize,
@@ -423,6 +529,19 @@ where
     }
 
     /// Verify a Merkle inclusion proof for a codeword value
+    ///
+    /// # Arguments
+    /// * `verifier_transcript` - Verifier transcript containing the inclusion proof
+    /// * `data` - Data value to verify inclusion for
+    /// * `index` - Index in the codeword
+    /// * `fri_params` - FRI protocol parameters
+    /// * `commitment` - Merkle tree root commitment
+    ///
+    /// # Returns
+    /// Ok(()) if inclusion proof is valid
+    ///
+    /// # Errors
+    /// When inclusion proof verification fails
     fn verify_inclusion_proof(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
@@ -446,6 +565,17 @@ where
     }
 
     /// Decode a Reed-Solomon encoded codeword back to original data
+    ///
+    /// # Arguments
+    /// * `codeword` - Encoded codeword to decode
+    /// * `fri_params` - FRI protocol parameters
+    /// * `ntt` - Number Theoretic Transform instance
+    ///
+    /// # Returns
+    /// Decoded packed field values
+    ///
+    /// # Errors
+    /// When decoding fails
     fn decode_codeword(
         &self,
         codeword: &[P::Scalar],
@@ -486,6 +616,15 @@ where
     }
 
     /// Extract commitment from verifier transcript
+    ///
+    /// # Arguments
+    /// * `verifier_transcript` - Verifier transcript to extract commitment from
+    ///
+    /// # Returns
+    /// Commitment bytes
+    ///
+    /// # Errors
+    /// When commitment extraction fails
     #[allow(dead_code)]
     fn extract_commitment(
         &self,
@@ -498,6 +637,20 @@ where
     }
 
     /// Low-level batch decoding using inverse NTT
+    ///
+    /// # Arguments
+    /// * `log_len` - Logarithm of dimension
+    /// * `log_inv` - Logarithm of inverse rate
+    /// * `log_batch_size` - Logarithm of batch size
+    /// * `ntt` - Number Theoretic Transform instance
+    /// * `data` - Input data to decode
+    /// * `output` - Output buffer for decoded data
+    ///
+    /// # Returns
+    /// Ok(()) if decoding succeeds
+    ///
+    /// # Errors
+    /// When decoding fails due to invalid parameters
     fn decode_batch(
         &self,
         log_len: usize,
