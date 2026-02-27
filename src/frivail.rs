@@ -17,7 +17,6 @@ use binius_math::{
     BinarySubspace, FieldBuffer, FieldSlice, FieldSliceMut,
 };
 use binius_prover::{
-    fri::{CommitOutput, FRIQueryProver},
     hash::parallel_compression::ParallelCompressionAdaptor,
     merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
@@ -29,7 +28,7 @@ use binius_verifier::{
     config::{StdChallenger, B1},
     fri::{ConstantArityStrategy, FRIParams},
     hash::{StdCompression, StdDigest},
-    merkle_tree::{BinaryMerkleTreeScheme, MerkleTreeScheme},
+    merkle_tree::MerkleTreeScheme,
 };
 
 use itertools::{izip, Itertools};

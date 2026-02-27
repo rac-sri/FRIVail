@@ -1,18 +1,13 @@
 use binius_field::PackedExtension;
 pub use binius_field::PackedField;
 use binius_math::ntt::{domain_context::GenericPreExpanded, AdditiveNTT, NeighborsLastMultiThread};
-use binius_prover::{
-    fri::FRIQueryProver,
-    hash::parallel_compression::ParallelCompressionAdaptor,
-    merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
-};
+use binius_prover::merkle_tree::MerkleTreeProver;
 use binius_transcript::VerifierTranscript;
 pub use binius_verifier::config::B128;
-use binius_verifier::merkle_tree::BinaryMerkleTreeScheme;
 use binius_verifier::{
     config::{StdChallenger, B1},
     fri::FRIParams,
-    hash::{StdCompression, StdDigest},
+    hash::StdDigest,
 };
 use std::mem::MaybeUninit;
 
