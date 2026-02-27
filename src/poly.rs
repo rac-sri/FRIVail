@@ -49,6 +49,13 @@ where
         Self { _p: PhantomData }
     }
 
+    /// Convert a byte chunk to a field element
+    fn bytes_to_scalar(&self, chunk: &[u8]) -> P::Scalar {
+        let mut bytes_array = [0u8; BYTES_PER_ELEMENT];
+        bytes_array[..chunk.len()].copy_from_slice(chunk);
+        P::Scalar::from(u128::from_le_bytes(bytes_array))
+    }
+
     /// Convert raw bytes to a packed multilinear extension
     ///
     /// # Process:
@@ -85,13 +92,7 @@ where
         #[cfg(feature = "parallel")]
         let mut packed_values: Vec<P::Scalar> = {
             data.par_chunks(BYTES_PER_ELEMENT)
-                .map(|chunk| {
-                    // Create 16-byte array and copy chunk data
-                    let mut bytes_array = [0u8; 16];
-                    bytes_array[..chunk.len()].copy_from_slice(chunk);
-                    // Convert to u128 (little-endian) then to field element
-                    P::Scalar::from(u128::from_le_bytes(bytes_array))
-                })
+                .map(|chunk| self.bytes_to_scalar(chunk))
                 .collect()
         };
 
@@ -100,10 +101,7 @@ where
         let mut packed_values: Vec<P::Scalar> = {
             let mut values = Vec::with_capacity(num_elements);
             for chunk in data.chunks(BYTES_PER_ELEMENT) {
-                let mut bytes_array = [0u8; BYTES_PER_ELEMENT];
-                bytes_array[..chunk.len()].copy_from_slice(chunk);
-                let scalar = P::Scalar::from(u128::from_le_bytes(bytes_array));
-                values.push(scalar);
+                values.push(self.bytes_to_scalar(chunk));
             }
             values
         };
