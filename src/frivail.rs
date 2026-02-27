@@ -283,7 +283,6 @@ where
 
     /// Compute Lagrange interpolation at a specific point
     fn interpolate_at_point(
-        &self,
         x_e: P::Scalar,
         known: &[(P::Scalar, P::Scalar)],
         k: usize,
@@ -355,7 +354,7 @@ where
                 .map(|&missing| {
                     debug!("Calculating value for missing index: {}", missing);
                     let x_e = domain[missing];
-                    let value = self.interpolate_at_point(x_e, &known, k);
+                    let value = Self::interpolate_at_point(x_e, &known, k);
 
                     debug!(
                         "Reconstructed value for missing index {}: {:?}",
@@ -377,7 +376,7 @@ where
             for &missing in corrupted_indices {
                 debug!("Calculating value for missing index: {}", missing);
                 let x_e = domain[missing];
-                let value = self.interpolate_at_point(x_e, &known, k);
+                let value = Self::interpolate_at_point(x_e, &known, k);
 
                 debug!(
                     "Reconstructed value for missing index {}: {:?}",
