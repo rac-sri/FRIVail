@@ -1,6 +1,6 @@
 use kate::{
-    M1NoPrecomp,
     gridgen::core::{AsBytes, EvaluationGrid},
+    M1NoPrecomp,
 };
 
 pub use kate::couscous::multiproof_params;

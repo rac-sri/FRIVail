@@ -33,7 +33,7 @@ binius-das-poc = { path = "path/to/binius-das-poc" }
 
 ```rust
 use binius_das_poc::{
-    friVail::{B128, FriVailDefault},
+    frivail::{B128, FriVailDefault},
     poly::Utils,
     traits::{FriVailSampling, FriVailUtils},
 };
@@ -256,7 +256,7 @@ cargo test test_data_availability_sampling
 
 The library includes comprehensive tests:
 
-- `test_friVail_new`: Basic initialization
+- `test_frivail_new`: Basic initialization
 - `test_field_conversion_methods`: Field arithmetic
 - `test_calculate_evaluation_point_random`: Evaluation point generation
 - `test_initialize_fri_context`: FRI context setup
