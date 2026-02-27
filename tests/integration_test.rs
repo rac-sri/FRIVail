@@ -1,11 +1,7 @@
 use binius_field::field::FieldOps;
 use binius_transcript::VerifierTranscript;
 use binius_verifier::config::StdChallenger;
-use frivail::{
-    frivail::{FriVeilDefault, B128},
-    poly::Utils,
-    traits::FriVeilSampling,
-};
+use frivail::{poly::Utils, traits::FriVailSampling, FriVailDefault, B128};
 use rand::{rngs::StdRng, seq::index::sample, SeedableRng};
 use std::time::Instant;
 use tracing::{debug, error, info, span, warn, Level};
@@ -74,7 +70,7 @@ fn test_integration_main() {
     let _span = span!(Level::INFO, "fri_initialization").entered();
     info!("🔧 Phase 3: Initializing FRI-based polynomial commitment scheme");
     let start = Instant::now();
-    let friveil = FriVeilDefault::new(
+    let friveil = FriVailDefault::new(
         LOG_INV_RATE,
         NUM_TEST_QUERIES,
         4,
