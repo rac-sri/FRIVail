@@ -2,6 +2,7 @@ use binius_field::PackedExtension;
 pub use binius_field::PackedField;
 use binius_math::ntt::{domain_context::GenericPreExpanded, AdditiveNTT, NeighborsLastMultiThread};
 use binius_prover::{
+    fri::FRIQueryProver,
     hash::parallel_compression::ParallelCompressionAdaptor,
     merkle_tree::{prover::BinaryMerkleTreeProver, MerkleTreeProver},
 };
@@ -14,6 +15,38 @@ use binius_verifier::{
     hash::{StdCompression, StdDigest},
 };
 use std::mem::MaybeUninit;
+
+// ============================================================================
+// Type Aliases for Complex Types
+// ============================================================================
+
+/// Type alias for the Merkle tree prover
+pub type MerkleProver<P> = BinaryMerkleTreeProver<
+    <P as PackedField>::Scalar,
+    StdDigest,
+    ParallelCompressionAdaptor<StdCompression>,
+>;
+
+/// Type alias for field element vectors
+pub type FieldElements<P> = Vec<<P as PackedField>::Scalar>;
+
+/// Type alias for results with field elements
+pub type FieldResult<P> = Result<FieldElements<P>, String>;
+
+/// Type alias for transcript results
+pub type TranscriptResult = Result<VerifierTranscript<StdChallenger>, String>;
+
+/// Type alias for byte vector results
+pub type ByteResult = Result<Vec<u8>, String>;
+
+/// Type alias for FRI query prover
+pub type FRIQueryProverAlias<'a, P> = FRIQueryProver<
+    'a,
+    <P as PackedField>::Scalar,
+    P,
+    MerkleProver<P>,
+    BinaryMerkleTreeScheme<<P as PackedField>::Scalar, StdDigest, StdCompression>,
+>;
 
 pub trait FriVeilSampling<
     P: PackedField<Scalar = B128> + PackedExtension<B128> + PackedExtension<B1>,
@@ -49,41 +82,24 @@ pub trait FriVeilSampling<
 
     fn inclusion_proof(
         &self,
-        committed: &<BinaryMerkleTreeProver<
-            P::Scalar,
-            StdDigest,
-            ParallelCompressionAdaptor<StdCompression>,
-        > as MerkleTreeProver<P::Scalar>>::Committed,
+        committed: &<MerkleProver<P> as MerkleTreeProver<<P as PackedField>::Scalar>>::Committed,
         index: usize,
-    ) -> Result<VerifierTranscript<StdChallenger>, String>;
+    ) -> TranscriptResult;
 
-    fn open<'b>(
-        &self,
-        index: usize,
-        query_prover: &binius_prover::fri::FRIQueryProver<
-            'b,
-            P::Scalar,
-            P,
-            BinaryMerkleTreeProver<
-                P::Scalar,
-                StdDigest,
-                ParallelCompressionAdaptor<StdCompression>,
-            >,
-            BinaryMerkleTreeScheme<P::Scalar, StdDigest, StdCompression>,
-        >,
-    ) -> Result<VerifierTranscript<StdChallenger>, String>;
+    fn open<'b>(&self, index: usize, query_prover: &FRIQueryProverAlias<'b, P>)
+        -> TranscriptResult;
 
     fn decode_codeword(
         &self,
         codeword: &[P::Scalar],
         fri_params: FRIParams<P::Scalar>,
         ntt: &NeighborsLastMultiThread<GenericPreExpanded<P::Scalar>>,
-    ) -> Result<Vec<P::Scalar>, String>;
+    ) -> FieldResult<P>;
 
     fn extract_commitment(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
-    ) -> Result<Vec<u8>, String>;
+    ) -> ByteResult;
 
     fn decode_batch(
         &self,

@@ -71,6 +71,55 @@ pub type FriVeilDefault = FriVeil<
     NeighborsLastMultiThread<GenericPreExpanded<B128>>,
 >;
 
+// ============================================================================
+// Type Aliases for Complex Types
+// ============================================================================
+
+/// Type alias for the Merkle tree prover
+type MerkleProver<P> = BinaryMerkleTreeProver<
+    <P as PackedField>::Scalar,
+    StdDigest,
+    ParallelCompressionAdaptor<StdCompression>,
+>;
+
+/// Type alias for field element vectors
+pub type FieldElements<P> = Vec<<P as PackedField>::Scalar>;
+
+/// Type alias for results with field elements
+pub type FieldResult<P> = Result<FieldElements<P>, String>;
+
+/// Type alias for transcript results
+pub type TranscriptResult = Result<VerifierTranscript<StdChallenger>, String>;
+
+/// Type alias for byte vector results
+pub type ByteResult = Result<Vec<u8>, String>;
+
+/// Type alias for commitment output
+type CommitmentOutput<P> = CommitOutput<
+    P,
+    digest::Output<StdDigest>,
+    <MerkleProver<P> as MerkleTreeProver<<P as PackedField>::Scalar>>::Committed,
+>;
+
+/// Type alias for FRI query prover
+type FRIQueryProverAlias<'a, P> = FRIQueryProver<
+    'a,
+    <P as PackedField>::Scalar,
+    P,
+    MerkleProver<P>,
+    BinaryMerkleTreeScheme<<P as PackedField>::Scalar, StdDigest, StdCompression>,
+>;
+
+/// Type alias for prove() return type
+type ProveResult<'a, P> = Result<
+    (
+        FieldBuffer<<P as PackedField>::Scalar>,
+        FRIQueryProverAlias<'a, P>,
+        Vec<u8>,
+    ),
+    String,
+>;
+
 /// FRI-Veil polynomial commitment scheme
 ///
 /// Generic over:
@@ -202,7 +251,7 @@ where
     ///
     /// Uses a fixed seed `[0; 32]` for deterministic behavior in tests.
     /// For production use, consider using a cryptographically secure RNG.
-    pub fn calculate_evaluation_point_random(&self) -> Result<Vec<P::Scalar>, String> {
+    pub fn calculate_evaluation_point_random(&self) -> FieldResult<P> {
         let mut rng = StdRng::from_seed([0; 32]);
         let evaluation_point: Vec<P::Scalar> = (0..self.n_vars)
             .map(|_| <B128 as Random>::random(&mut rng))
@@ -280,18 +329,7 @@ where
         packed_mle: FieldBuffer<P>,
         fri_params: FRIParams<P::Scalar>,
         ntt: &NeighborsLastMultiThread<GenericPreExpanded<P::Scalar>>,
-    ) -> Result<
-        CommitOutput<
-            P,
-            digest::Output<StdDigest>,
-            <BinaryMerkleTreeProver<
-                P::Scalar,
-                StdDigest,
-                ParallelCompressionAdaptor<StdCompression>,
-            > as MerkleTreeProver<P::Scalar>>::Committed,
-        >,
-        String,
-    > {
+    ) -> Result<CommitmentOutput<P>, String> {
         let pcs = PCSProver::new(ntt, &self.merkle_prover, &fri_params);
         pcs.commit(packed_mle.to_ref()).map_err(|e| e.to_string())
     }
@@ -337,34 +375,9 @@ where
         packed_mle: FieldBuffer<P>,
         fri_params: &'b FRIParams<P::Scalar>,
         ntt: &'b NeighborsLastMultiThread<GenericPreExpanded<P::Scalar>>,
-        commit_output: &'b CommitOutput<
-            P,
-            digest::Output<StdDigest>,
-            <BinaryMerkleTreeProver<
-                P::Scalar,
-                StdDigest,
-                ParallelCompressionAdaptor<StdCompression>,
-            > as MerkleTreeProver<P::Scalar>>::Committed,
-        >,
+        commit_output: &'b CommitmentOutput<P>,
         evaluation_point: &[P::Scalar],
-    ) -> Result<
-        (
-            FieldBuffer<P::Scalar>,
-            FRIQueryProver<
-                'b,
-                P::Scalar,
-                P,
-                BinaryMerkleTreeProver<
-                    P::Scalar,
-                    StdDigest,
-                    ParallelCompressionAdaptor<StdCompression>,
-                >,
-                BinaryMerkleTreeScheme<P::Scalar, StdDigest, StdCompression>,
-            >,
-            Vec<u8>,
-        ),
-        String,
-    > {
+    ) -> ProveResult<'b, P> {
         let pcs = PCSProver::new(ntt, &self.merkle_prover, fri_params);
 
         let mut prover_transcript = ProverTranscript::new(StdChallenger::default());
@@ -657,13 +670,9 @@ where
     /// ```
     fn inclusion_proof(
         &self,
-        committed: &<BinaryMerkleTreeProver<
-            P::Scalar,
-            StdDigest,
-            ParallelCompressionAdaptor<StdCompression>,
-        > as MerkleTreeProver<P::Scalar>>::Committed,
+        committed: &<MerkleProver<P> as MerkleTreeProver<<P as PackedField>::Scalar>>::Committed,
         index: usize,
-    ) -> Result<VerifierTranscript<StdChallenger>, String> {
+    ) -> TranscriptResult {
         let mut proof_writer = ProverTranscript::new(StdChallenger::default());
         self.merkle_prover
             .prove_opening(committed, 0, index, &mut proof_writer.message())
@@ -681,18 +690,8 @@ where
     fn open<'b>(
         &self,
         index: usize,
-        query_prover: &binius_prover::fri::FRIQueryProver<
-            'b,
-            P::Scalar,
-            P,
-            BinaryMerkleTreeProver<
-                P::Scalar,
-                StdDigest,
-                ParallelCompressionAdaptor<StdCompression>,
-            >,
-            BinaryMerkleTreeScheme<P::Scalar, StdDigest, StdCompression>,
-        >,
-    ) -> Result<VerifierTranscript<StdChallenger>, String> {
+        query_prover: &FRIQueryProverAlias<'b, P>,
+    ) -> TranscriptResult {
         // Create new transcript for the query proof
         let mut proof_transcript = ProverTranscript::new(StdChallenger::default());
         let mut advice = proof_transcript.decommitment();
@@ -790,7 +789,7 @@ where
         codeword: &[P::Scalar],
         fri_params: FRIParams<P::Scalar>,
         ntt: &NeighborsLastMultiThread<GenericPreExpanded<P::Scalar>>,
-    ) -> Result<Vec<P::Scalar>, String> {
+    ) -> FieldResult<P> {
         let rs_code = fri_params.rs_code();
         let len = 1 << (rs_code.log_len() + fri_params.log_batch_size() - P::LOG_WIDTH);
 
@@ -846,7 +845,7 @@ where
     fn extract_commitment(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
-    ) -> Result<Vec<u8>, String> {
+    ) -> ByteResult {
         verifier_transcript
             .message()
             .read()
