@@ -15,8 +15,6 @@ const BITS_PER_ELEMENT: usize = 128;
 ///
 /// Generic over packed field type `P` which must support extension field operations
 pub struct Utils<P> {
-    /// Logarithm of the scalar bit width (e.g., 7 for 128-bit fields)
-    log_scalar_bit_width: usize,
     /// Phantom data to hold the packed field type parameter
     _p: PhantomData<P>,
 }
@@ -48,10 +46,7 @@ where
     ///
     /// Initializes with the logarithm of the scalar field degree
     pub fn new() -> Self {
-        Self {
-            log_scalar_bit_width: <P::Scalar as ExtensionField<B1>>::LOG_DEGREE,
-            _p: PhantomData,
-        }
+        Self { _p: PhantomData }
     }
 
     /// Convert raw bytes to a packed multilinear extension
