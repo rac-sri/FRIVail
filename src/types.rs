@@ -14,7 +14,6 @@ use binius_verifier::{
     merkle_tree::BinaryMerkleTreeScheme,
 };
 
-/// Default FRI-Vail configuration
 pub type FriVailDefault = crate::frivail::FriVail<
     'static,
     B128,
@@ -24,26 +23,20 @@ pub type FriVailDefault = crate::frivail::FriVail<
     >,
 >;
 
-/// Merkle tree prover
 pub type MerkleProver<P> = BinaryMerkleTreeProver<
     <P as PackedField>::Scalar,
     StdDigest,
     ParallelCompressionAdaptor<StdCompression>,
 >;
 
-/// Field element vectors
 pub type FieldElements<P> = Vec<<P as PackedField>::Scalar>;
 
-/// Results with field elements
 pub type FieldResult<P> = Result<FieldElements<P>, String>;
 
-/// Transcript results
 pub type TranscriptResult = Result<VerifierTranscript<StdChallenger>, String>;
 
-/// Byte vector results
 pub type ByteResult = Result<Vec<u8>, String>;
 
-/// Commitment output
 pub type CommitmentOutput<P> =
     CommitOutput<
         P,
@@ -53,7 +46,6 @@ pub type CommitmentOutput<P> =
         >>::Committed,
     >;
 
-/// FRI query prover
 pub type FRIQueryProverAlias<'a, P> = FRIQueryProver<
     'a,
     <P as PackedField>::Scalar,
@@ -62,7 +54,6 @@ pub type FRIQueryProverAlias<'a, P> = FRIQueryProver<
     BinaryMerkleTreeScheme<<P as PackedField>::Scalar, StdDigest, StdCompression>,
 >;
 
-/// prove() return type
 pub type ProveResult<'a, P> = Result<
     (
         binius_math::FieldBuffer<<P as PackedField>::Scalar>,
@@ -72,7 +63,6 @@ pub type ProveResult<'a, P> = Result<
     String,
 >;
 
-/// Test configuration
 pub type TestFriVail = crate::frivail::FriVail<
     'static,
     B128,
@@ -82,6 +72,5 @@ pub type TestFriVail = crate::frivail::FriVail<
     >,
 >;
 
-// Re-export for public use
 pub use crate::frivail::FriVail;
 pub use crate::traits::{FriVailSampling, FriVailUtils};
