@@ -1,25 +1,7 @@
-//! FRI-Veil: FRI-based Vector Commitment Scheme with Data Availability Sampling
-//!
-//! This module implements a polynomial commitment scheme using FRI Binius (Fast Reed-Solomon
-//! Interactive Oracle Proofs) combined with Merkle tree commitments. It provides:
-//!
-//! - **Polynomial Commitment**: Commit to multilinear polynomials over binary fields
-//! - **Reed-Solomon Encoding**: Error correction codes for data availability
-//! - **Merkle Tree Commitments**: Cryptographic commitments to codewords
-//! - **Inclusion Proofs**: Prove that specific values are part of the commitment
-//! - **Data Availability Sampling**: Verify data availability by sampling random positions
-//!
-//! # Architecture
-//!
-//! ```text
-//! Data → MLE → FRI Context → Commitment → Encoding/Decoding
-//!                                ↓
-//!                         Merkle Tree Root
-//!                                ↓
-//!                    Inclusion Proofs + Sampling
-//! ```
+//! FRI-Vail: FRI-based Vector Commitment Scheme with Data Availability Sampling
 
-use crate::traits::{FriVeilSampling, FriVeilUtils};
+use crate::traits::{FriVailSampling, FriVailUtils};
+use crate::types::*;
 use binius_field::field::FieldOps;
 pub use binius_field::PackedField;
 use binius_field::{Field, PackedExtension, Random};
@@ -58,82 +40,8 @@ use tracing::debug;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-/// Default FRI-Veil configuration using 128-bit binary fields
-///
-/// This type alias provides a convenient default configuration with:
-/// - Packed field: B128 (128-bit binary field)
-/// - Merkle tree: Binary Merkle tree with standard hash functions
-/// - NTT: Neighbors-last multi-threaded NTT implementation
-pub type FriVeilDefault = FriVeil<
-    'static,
-    B128,
-    BinaryMerkleTreeScheme<B128, StdDigest, StdCompression>,
-    NeighborsLastMultiThread<GenericPreExpanded<B128>>,
->;
-
-// ============================================================================
-// Type Aliases for Complex Types
-// ============================================================================
-
-/// Type alias for the Merkle tree prover
-type MerkleProver<P> = BinaryMerkleTreeProver<
-    <P as PackedField>::Scalar,
-    StdDigest,
-    ParallelCompressionAdaptor<StdCompression>,
->;
-
-/// Type alias for field element vectors
-pub type FieldElements<P> = Vec<<P as PackedField>::Scalar>;
-
-/// Type alias for results with field elements
-pub type FieldResult<P> = Result<FieldElements<P>, String>;
-
-/// Type alias for transcript results
-pub type TranscriptResult = Result<VerifierTranscript<StdChallenger>, String>;
-
-/// Type alias for byte vector results
-pub type ByteResult = Result<Vec<u8>, String>;
-
-/// Type alias for commitment output
-type CommitmentOutput<P> = CommitOutput<
-    P,
-    digest::Output<StdDigest>,
-    <MerkleProver<P> as MerkleTreeProver<<P as PackedField>::Scalar>>::Committed,
->;
-
-/// Type alias for FRI query prover
-type FRIQueryProverAlias<'a, P> = FRIQueryProver<
-    'a,
-    <P as PackedField>::Scalar,
-    P,
-    MerkleProver<P>,
-    BinaryMerkleTreeScheme<<P as PackedField>::Scalar, StdDigest, StdCompression>,
->;
-
-/// Type alias for prove() return type
-type ProveResult<'a, P> = Result<
-    (
-        FieldBuffer<<P as PackedField>::Scalar>,
-        FRIQueryProverAlias<'a, P>,
-        Vec<u8>,
-    ),
-    String,
->;
-
-/// FRI-Veil polynomial commitment scheme
-///
-/// Generic over:
-/// - `'a`: Lifetime for NTT reference
-/// - `P`: Packed field type for efficient operations
-/// - `VCS`: Vector commitment scheme (Merkle tree)
-/// - `NTT`: Number Theoretic Transform implementation
-///
-/// # Type Parameters
-///
-/// - `P`: Must be a packed field over B128 scalars with extension field properties
-/// - `VCS`: Merkle tree scheme for vector commitments
-/// - `NTT`: Additive NTT over B128 field, used for Reed-Solomon encoding
-pub struct FriVeil<'a, P, VCS, NTT>
+/// FRI-Vail polynomial commitment scheme
+pub struct FriVail<'a, P, VCS, NTT>
 where
     NTT: AdditiveNTT<Field = B128> + Sync,
     P: PackedField<Scalar = B128> + PackedExtension<B128> + PackedExtension<B1>,
@@ -150,24 +58,13 @@ where
     _vcs: PhantomData<VCS>,
 }
 
-impl<'a, P, VCS, NTT> FriVeil<'a, P, VCS, NTT>
+impl<'a, P, VCS, NTT> FriVail<'a, P, VCS, NTT>
 where
     P: PackedField<Scalar = B128> + PackedExtension<B128> + PackedExtension<B1>,
     VCS: MerkleTreeScheme<P::Scalar>,
     NTT: AdditiveNTT<Field = B128> + Sync,
 {
-    /// Create a new FRI-Veil instance
-    ///
-    /// # Arguments
-    ///
-    /// * `log_inv_rate` - Logarithm of Reed-Solomon inverse rate
-    ///   - 1 means 2x expansion (50% redundancy)
-    ///   - 2 means 4x expansion (75% redundancy)
-    /// * `num_test_queries` - Number of FRI test queries (security parameter)
-    ///   - Typical values: 64-128 for good security
-    /// * `arity` - Folding arity for FRI layers
-    /// * `n_vars` - Number of variables in the multilinear polynomial
-    /// * `log_num_shares` - Logarithm of Merkle tree shares
+    /// Create a new FRI-Vail instance
     pub fn new(
         log_inv_rate: usize,
         num_test_queries: usize,
@@ -190,20 +87,6 @@ where
     }
 
     /// Initialize FRI protocol context and NTT for Reed-Solomon encoding
-    ///
-    /// This sets up the necessary parameters for FRI-based polynomial commitment:
-    /// - Creates Reed-Solomon code with specified expansion rate
-    /// - Configures FRI folding parameters (arities)
-    /// - Initializes NTT domain for efficient encoding/decoding
-    ///
-    /// # Arguments
-    ///
-    /// * `packed_buffer` - Packed field buffer containing the polynomial evaluations
-    ///
-    /// # Returns
-    ///
-    /// * `Ok((FRIParams, NTT))` - FRI parameters and NTT instance
-    /// * `Err(String)` - Error message if initialization fail
     pub fn initialize_fri_context(
         &self,
         packed_buffer_log_len: usize,
@@ -238,19 +121,6 @@ where
     }
 
     /// Generate a random evaluation point for polynomial evaluation
-    ///
-    /// Creates a random point in the n-dimensional space for evaluating
-    /// the multilinear polynomial. Uses a fixed seed for reproducibility.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Vec<P::Scalar>)` - Random evaluation point with `n_vars` coordinates
-    /// * `Err(String)` - Error message (currently never fails)
-    ///
-    /// # Note
-    ///
-    /// Uses a fixed seed `[0; 32]` for deterministic behavior in tests.
-    /// For production use, consider using a cryptographically secure RNG.
     pub fn calculate_evaluation_point_random(&self) -> FieldResult<P> {
         let mut rng = StdRng::from_seed([0; 32]);
         let evaluation_point: Vec<P::Scalar> = (0..self.n_vars)
@@ -260,27 +130,6 @@ where
     }
 
     /// Calculate the evaluation claim for a polynomial at a given point
-    ///
-    /// Computes the multilinear extension evaluation using the equality polynomial.
-    /// This is the claimed value that the prover will prove is correct.
-    ///
-    /// # Arguments
-    ///
-    /// * `data` - Polynomial evaluations (coefficients in evaluation form)
-    /// * `evaluation_point` - Point at which to evaluate the polynomial
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(P::Scalar)` - The evaluation result (claim)
-    /// * `Err(String)` - Error if dimensions don't match
-    ///
-    /// # Algorithm
-    ///
-    /// Uses the equality polynomial to compute:
-    /// ```text
-    /// eval = Σ data[i] * eq(i, evaluation_point)
-    /// ```
-    /// where `eq` is the multilinear equality polynomial
     pub fn calculate_evaluation_claim(
         &self,
         values: &[P::Scalar],
@@ -300,30 +149,6 @@ where
     }
 
     /// Generate a polynomial commitment and codeword
-    ///
-    /// Creates a Merkle tree commitment to the Reed-Solomon encoded codeword.
-    /// This is the core commitment phase of the polynomial commitment scheme.
-    ///
-    /// # Arguments
-    ///
-    /// * `packed_mle` - Packed multilinear extension to commit to
-    /// * `fri_params` - FRI protocol parameters
-    /// * `ntt` - NTT instance for encoding
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(CommitOutput)` - Contains:
-    ///   - `codeword`: Reed-Solomon encoded values
-    ///   - `commitment`: Merkle root (32 bytes)
-    ///   - `committed`: Merkle tree structure for proof generation
-    /// * `Err(String)` - Error message if commitment fails
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let commit_output = friveil.commit(packed_mle, fri_params, &ntt)?;
-    /// println!("Commitment: {:?}", commit_output.commitment);
-    /// ```
     pub fn commit(
         &self,
         packed_mle: FieldBuffer<P>,
@@ -335,41 +160,6 @@ where
     }
 
     /// Generate an evaluation proof for the committed polynomial
-    ///
-    /// Creates a FRI-based proof that the polynomial evaluates to a specific
-    /// value at the given evaluation point. This proof can be verified without
-    /// access to the full polynomial.
-    ///
-    /// # Arguments
-    ///
-    /// * `packed_mle` - The original packed multilinear extension
-    /// * `fri_params` - FRI protocol parameters
-    /// * `ntt` - NTT instance for encoding
-    /// * `commit_output` - Output from the commit phase
-    /// * `evaluation_point` - Point at which to prove evaluation
-    ///
-    /// # Returns
-    ///
-    /// * `Ok((terminate_codeword, query_prover, transcript_bytes))` - Proof components
-    /// * `Err(String)` - Error message if proof generation fails
-    ///
-    /// # Process
-    ///
-    /// 1. Initialize prover transcript with commitment
-    /// 2. Run FRI protocol to generate proof
-    /// 3. Return query_prover for further operations
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let (terminate_codeword, query_prover, transcript_bytes) = friveil.prove(
-    ///     packed_mle,
-    ///     fri_params,
-    ///     &ntt,
-    ///     &commit_output,
-    ///     &evaluation_point,
-    /// )?;
-    /// ``
     pub fn prove<'b>(
         &'b self,
         packed_mle: FieldBuffer<P>,
@@ -407,20 +197,6 @@ where
     }
 
     /// Encode data using Reed-Solomon code with NTT
-    ///
-    /// This is a helper function to observe NTT encoding behavior outside
-    /// the `commit` function. Applies Reed-Solomon encoding to expand data
-    /// with redundancy for error correction.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Vec<P::Scalar>)` - Encoded codeword with redundancy
-    /// * `Err(String)` - Error message if encoding fails
-    ///
-    /// # Note
-    ///
-    /// This function is marked `#[allow(dead_code)]` as it's primarily used
-    /// for testing and debugging. The `commit` function handles encoding internally.
     #[allow(dead_code)]
     pub fn encode_codeword(
         &self,
@@ -470,18 +246,13 @@ where
     }
 }
 
-impl<'a, P, VCS, NTT> FriVeilSampling<P, NTT> for FriVeil<'a, P, VCS, NTT>
+impl<'a, P, VCS, NTT> FriVailSampling<P, NTT> for FriVail<'a, P, VCS, NTT>
 where
     NTT: AdditiveNTT<Field = B128> + Sync,
     P: PackedField<Scalar = B128> + PackedExtension<B128> + PackedExtension<B1>,
     VCS: MerkleTreeScheme<P::Scalar>,
 {
     /// Decode a Reed-Solomon codeword with error correction for missing points
-    /// This implements proper Reed-Solomon erasure decoding using polynomial interpolation
-    /// Note: Extremely naive algorithm, primarily for soundness guarantee demonstration.
-    /// # Performance
-    /// - When compiled with `--features parallel`, uses rayon for parallel processing
-    /// - When compiled without the parallel feature, uses sequential processing
     fn reconstruct_codeword_naive(
         &self,
         corrupted_codeword: &mut [P::Scalar],
@@ -551,27 +322,6 @@ where
     }
 
     /// Verify an evaluation proof for the committed polynomial
-    ///
-    /// Verifies that a polynomial evaluates to a claimed value at a given point
-    /// using the FRI-based proof in the transcript.
-    ///
-    /// # Arguments
-    ///
-    /// * `verifier_transcript` - Transcript containing the proof
-    /// * `evaluation_claim` - Claimed evaluation result
-    /// * `evaluation_point` - Point at which polynomial was evaluated
-    /// * `fri_params` - FRI protocol parameters
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Proof is valid
-    /// * `Err(String)` - Proof is invalid or verification failed
-    ///
-    /// # Process
-    ///
-    /// 1. Extract commitment from transcript
-    /// 2. Run FRI verification protocol
-    /// 3. Check consistency with claimed evaluation
     fn verify(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
@@ -638,25 +388,6 @@ where
     }
 
     /// Generate a Merkle inclusion proof for a specific codeword position
-    ///
-    /// Creates a proof that a value at a given index is part of the committed
-    /// codeword. This is used for data availability sampling.
-    ///
-    /// # Arguments
-    ///
-    /// * `committed` - Merkle tree commitment structure
-    /// * `index` - Position in the codeword to prove
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(VerifierTranscript)` - Transcript containing the inclusion proof
-    /// * `Err(String)` - Error generating the proof
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let proof = friveil.inclusion_proof(&commit_output.committed, 42)?;
-    /// ```
     fn inclusion_proof(
         &self,
         committed: &<MerkleProver<P> as MerkleTreeProver<<P as PackedField>::Scalar>>::Committed,
@@ -673,9 +404,6 @@ where
     }
 
     /// Open a commitment at a specific index using FRI query prover
-    ///
-    /// Generates a query proof at the specified index using the FRI query prover.
-    /// This creates a separate transcript with the proof data for the given index.
     fn open<'b>(
         &self,
         index: usize,
@@ -695,34 +423,6 @@ where
     }
 
     /// Verify a Merkle inclusion proof for a codeword value
-    ///
-    /// Verifies that a value at a specific index is correctly committed
-    /// in the Merkle tree. This is the verification counterpart to `inclusion_proof`.
-    ///
-    /// # Arguments
-    ///
-    /// * `verifier_transcript` - Transcript containing the inclusion proof
-    /// * `data` - Value(s) to verify
-    /// * `index` - Position in the codeword
-    /// * `fri_params` - FRI parameters (for context)
-    /// * `commitment` - Merkle root commitment (32 bytes)
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Inclusion proof is valid
-    /// * `Err(String)` - Proof is invalid or verification failed
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// friveil.verify_inclusion_proof(
-    ///     &mut proof,
-    ///     &[value],
-    ///     index,
-    ///     &fri_params,
-    ///     commitment_bytes,
-    /// )?;
-    /// ```
     fn verify_inclusion_proof(
         &self,
         verifier_transcript: &mut VerifierTranscript<StdChallenger>,
@@ -746,33 +446,6 @@ where
     }
 
     /// Decode a Reed-Solomon encoded codeword back to original data
-    ///
-    /// Applies inverse Reed-Solomon transformation to recover the original
-    /// data from the encoded codeword. This is the inverse of `encode_codeword`.
-    ///
-    /// # Arguments
-    ///
-    /// * `codeword` - Reed-Solomon encoded codeword
-    /// * `fri_params` - FRI parameters containing RS code configuration
-    /// * `ntt` - NTT instance for efficient decoding
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Vec<P::Scalar>)` - Decoded original data
-    /// * `Err(String)` - Error message if decoding fails
-    ///
-    /// # Process
-    ///
-    /// 1. Calculate expected output length
-    /// 2. Apply inverse NTT transformation
-    /// 3. Trim to original data size (remove redundancy)
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let decoded = friveil.decode_codeword(&encoded, fri_params, &ntt)?;
-    /// assert_eq!(decoded, original_data);
-    /// ```
     fn decode_codeword(
         &self,
         codeword: &[P::Scalar],
@@ -813,23 +486,6 @@ where
     }
 
     /// Extract commitment from verifier transcript
-    ///
-    /// Helper function to read the commitment bytes from a transcript.
-    /// This is used internally for verification workflows.
-    ///
-    /// # Arguments
-    ///
-    /// * `verifier_transcript` - Transcript containing the commitment
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Vec<u8>)` - Commitment bytes
-    /// * `Err(String)` - Error reading from transcript
-    ///
-    /// # Note
-    ///
-    /// Marked as `#[allow(dead_code)]` as it's currently unused but
-    /// may be useful for future transcript manipulation.
     #[allow(dead_code)]
     fn extract_commitment(
         &self,
@@ -842,34 +498,6 @@ where
     }
 
     /// Low-level batch decoding using inverse NTT
-    ///
-    /// Performs the actual Reed-Solomon decoding operation using inverse NTT.
-    /// This is called by `decode_codeword` and handles the core transformation.
-    ///
-    /// # Arguments
-    ///
-    /// * `log_len` - Logarithm of codeword length
-    /// * `log_inv` - Logarithm of inverse rate (redundancy factor)
-    /// * `log_batch_size` - Logarithm of batch size
-    /// * `ntt` - NTT instance for transformation
-    /// * `data` - Input codeword data
-    /// * `output` - Uninitialized output buffer
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Decoding successful, output buffer is initialized
-    /// * `Err(String)` - Decoding failed
-    ///
-    /// # Safety
-    ///
-    /// On success, guarantees that all elements in `output` are properly initialized.
-    ///
-    /// # Implementation Details
-    ///
-    /// 1. Validates input dimensions
-    /// 2. Copies data to output buffer
-    /// 3. Applies inverse NTT with appropriate skip parameters
-    /// 4. Handles both packed and unpacked field representations
     fn decode_batch(
         &self,
         log_len: usize,
@@ -946,7 +574,7 @@ where
     }
 }
 
-impl FriVeilUtils for FriVeilDefault {
+impl FriVailUtils for FriVailDefault {
     fn get_transcript_bytes(&self, transcript: &VerifierTranscript<StdChallenger>) -> Vec<u8> {
         let mut cloned = transcript.clone();
         let mut message_reader = cloned.message();
@@ -983,13 +611,6 @@ mod tests {
         merkle_tree::BinaryMerkleTreeScheme,
     };
 
-    type TestFriVeil = FriVeil<
-        'static,
-        B128,
-        BinaryMerkleTreeScheme<B128, StdDigest, StdCompression>,
-        NeighborsLastMultiThread<GenericPreExpanded<B128>>,
-    >;
-
     fn create_test_data(size_bytes: usize) -> Vec<u8> {
         (0..size_bytes).map(|i| (i % 256) as u8).collect()
     }
@@ -1001,27 +622,27 @@ mod tests {
         const N_VARS: usize = 10;
         const LOG_NUM_SHARES: usize = 2;
 
-        let friveil = TestFriVeil::new(LOG_INV_RATE, NUM_TEST_QUERIES, 2, N_VARS, LOG_NUM_SHARES);
+        let friVail = TestFriVail::new(LOG_INV_RATE, NUM_TEST_QUERIES, 2, N_VARS, LOG_NUM_SHARES);
 
-        assert_eq!(friveil.log_inv_rate, LOG_INV_RATE);
-        assert_eq!(friveil.num_test_queries, NUM_TEST_QUERIES);
-        assert_eq!(friveil.n_vars, N_VARS);
-        assert_eq!(friveil.log_num_shares, LOG_NUM_SHARES);
+        assert_eq!(friVail.log_inv_rate, LOG_INV_RATE);
+        assert_eq!(friVail.num_test_queries, NUM_TEST_QUERIES);
+        assert_eq!(friVail.n_vars, N_VARS);
+        assert_eq!(friVail.log_num_shares, LOG_NUM_SHARES);
     }
 
     #[test]
     fn test_calculate_evaluation_point_random() {
         const N_VARS: usize = 8;
-        let friveil = TestFriVeil::new(1, 3, 2, N_VARS, 2);
+        let friVail = TestFriVail::new(1, 3, 2, N_VARS, 2);
 
-        let result = friveil.calculate_evaluation_point_random();
+        let result = friVail.calculate_evaluation_point_random();
         assert!(result.is_ok());
 
         let evaluation_point = result.unwrap();
         assert_eq!(evaluation_point.len(), N_VARS);
 
         // Test deterministic behavior with fixed seed
-        let result2 = friveil.calculate_evaluation_point_random();
+        let result2 = friVail.calculate_evaluation_point_random();
         assert!(result2.is_ok());
         let evaluation_point2 = result2.unwrap();
         assert_eq!(evaluation_point, evaluation_point2);
@@ -1029,7 +650,7 @@ mod tests {
 
     #[test]
     fn test_initialize_fri_context() {
-        let friveil = TestFriVeil::new(1, 3, 2, 12, 2);
+        let friVail = TestFriVail::new(1, 3, 2, 12, 2);
 
         // Create test data
         let test_data = create_test_data(1024); // 1KB test data
@@ -1037,14 +658,14 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let result = friveil.initialize_fri_context(packed_mle_values.packed_mle.log_len());
+        let result = friVail.initialize_fri_context(packed_mle_values.packed_mle.log_len());
         assert!(result.is_ok());
 
         let (fri_params, _ntt) = result.unwrap();
 
         // Verify FRI parameters are reasonable
-        assert_eq!(fri_params.rs_code().log_inv_rate(), friveil.log_inv_rate);
-        assert_eq!(fri_params.n_test_queries(), friveil.num_test_queries);
+        assert_eq!(fri_params.rs_code().log_inv_rate(), friVail.log_inv_rate);
+        assert_eq!(fri_params.n_test_queries(), friVail.num_test_queries);
     }
 
     #[test]
@@ -1056,14 +677,14 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
+        let friVail = TestFriVail::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
-        let (fri_params, ntt) = friveil
+        let (fri_params, ntt) = friVail
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
 
         // Test commit
-        let commit_result = friveil.commit(
+        let commit_result = friVail.commit(
             packed_mle_values.packed_mle.clone(),
             fri_params.clone(),
             &ntt,
@@ -1084,13 +705,13 @@ mod tests {
             let value = commit_output.codeword[i];
 
             // Generate inclusion proof
-            let inclusion_proof_result = friveil.inclusion_proof(&commit_output.committed, i);
+            let inclusion_proof_result = friVail.inclusion_proof(&commit_output.committed, i);
             assert!(inclusion_proof_result.is_ok());
 
             let mut inclusion_proof = inclusion_proof_result.unwrap();
 
             // Verify inclusion proof
-            let verify_result = friveil.verify_inclusion_proof(
+            let verify_result = friVail.verify_inclusion_proof(
                 &mut inclusion_proof,
                 &[value],
                 i,
@@ -1114,14 +735,14 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
+        let friVail = TestFriVail::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
-        let (fri_params, ntt) = friveil
+        let (fri_params, ntt) = friVail
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
 
         // Test commit
-        let commit_result = friveil.commit(
+        let commit_result = friVail.commit(
             packed_mle_values.packed_mle.clone(),
             fri_params.clone(),
             &ntt,
@@ -1133,12 +754,12 @@ mod tests {
         assert!(commit_output.codeword.len() > 0);
 
         // Generate evaluation point for prove
-        let evaluation_point = friveil
+        let evaluation_point = friVail
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
 
         // Generate proof to get query_prover
-        let prove_result = friveil.prove(
+        let prove_result = friVail.prove(
             packed_mle_values.packed_mle.clone(),
             &fri_params,
             &ntt,
@@ -1151,7 +772,7 @@ mod tests {
 
         // Test that open() method works with query_prover
         for i in 0..std::cmp::min(5, commit_output.codeword.len()) {
-            let open_result = friveil.open(i, &query_prover);
+            let open_result = friVail.open(i, &query_prover);
             assert!(open_result.is_ok(), "open() method failed for index {}", i);
         }
     }
@@ -1163,9 +784,9 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
+        let friVail = TestFriVail::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
-        let evaluation_point = friveil
+        let evaluation_point = friVail
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
 
@@ -1178,7 +799,7 @@ mod tests {
         println!("evaluation claim {:?}", evaluation_claim);
 
         let result =
-            friveil.calculate_evaluation_claim(&packed_mle_values.packed_values, &evaluation_point);
+            friVail.calculate_evaluation_claim(&packed_mle_values.packed_values, &evaluation_point);
         assert!(result.is_ok());
 
         let evaluation_claim = result.unwrap();
@@ -1194,14 +815,14 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
+        let friVail = TestFriVail::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
         // Initialize FRI context
-        let (fri_params, ntt) = friveil
+        let (fri_params, ntt) = friVail
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
 
         // Generate evaluation point
-        let evaluation_point = friveil
+        let evaluation_point = friVail
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
         let eval_point_eq = eq_ind_partial_eval(&evaluation_point);
@@ -1212,7 +833,7 @@ mod tests {
         assert_ne!(evaluation_claim, B128::default()); // Should not be zero for random inputs
 
         // Commit to MLE
-        let commit_output = friveil
+        let commit_output = friVail
             .commit(
                 packed_mle_values.packed_mle.clone(),
                 fri_params.clone(),
@@ -1221,7 +842,7 @@ mod tests {
             .expect("Failed to commit");
 
         // Generate proof
-        let prove_result = friveil.prove(
+        let prove_result = friVail.prove(
             packed_mle_values.packed_mle.clone(),
             &fri_params,
             &ntt,
@@ -1249,12 +870,12 @@ mod tests {
         let terminate_codeword_vec: Vec<_> = terminate_codeword.iter_scalars().collect();
 
         // Generate extra query proof using open()
-        let mut extra_transcript = friveil
+        let mut extra_transcript = friVail
             .open(0, &query_prover)
             .expect("Failed to generate extra query proof");
 
         // Verify proof with extra parameters
-        let verify_result = friveil.verify(
+        let verify_result = friVail.verify(
             &mut verifier_transcript,
             evaluation_claim,
             &evaluation_point,
@@ -1279,12 +900,12 @@ mod tests {
         let packed_mle_values = Utils::<B128>::new()
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
-        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
-        let (fri_params, ntt) = friveil
+        let friVail = TestFriVail::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
+        let (fri_params, ntt) = friVail
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
 
-        let commit_output = friveil
+        let commit_output = friVail
             .commit(
                 packed_mle_values.packed_mle.clone(),
                 fri_params.clone(),
@@ -1292,11 +913,11 @@ mod tests {
             )
             .expect("Failed to commit");
 
-        let evaluation_point = friveil
+        let evaluation_point = friVail
             .calculate_evaluation_point_random()
             .expect("Failed to generate evaluation point");
 
-        let (_terminate_codeword, _query_prover, transcript_bytes) = friveil
+        let (_terminate_codeword, _query_prover, transcript_bytes) = friVail
             .prove(
                 packed_mle_values.packed_mle.clone(),
                 &fri_params,
@@ -1313,7 +934,7 @@ mod tests {
         // Use wrong evaluation claim (should cause verification to fail)
         let wrong_evaluation_claim = B128::from(42u128);
 
-        let verify_result = friveil.verify(
+        let verify_result = friVail.verify(
             &mut verifier_transcript,
             wrong_evaluation_claim,
             &evaluation_point,
@@ -1349,15 +970,15 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
+        let friVail = TestFriVail::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 2);
 
         // Initialize FRI context
-        let (fri_params, ntt) = friveil
+        let (fri_params, ntt) = friVail
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
 
         // Commit to MLE
-        let commit_output = friveil
+        let commit_output = friVail
             .commit(
                 packed_mle_values.packed_mle.clone(),
                 fri_params.clone(),
@@ -1385,10 +1006,10 @@ mod tests {
 
         for &sample_index in indices.iter() {
             println!("sample index {sample_index}");
-            match friveil.inclusion_proof(&commit_output.committed, sample_index) {
+            match friVail.inclusion_proof(&commit_output.committed, sample_index) {
                 Ok(mut inclusion_proof) => {
                     let value = commit_output.codeword[sample_index];
-                    match friveil.verify_inclusion_proof(
+                    match friVail.verify_inclusion_proof(
                         &mut inclusion_proof,
                         &[value],
                         sample_index,
@@ -1430,20 +1051,20 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
+        let friVail = TestFriVail::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
         // Initialize FRI context
-        let (fri_params, ntt) = friveil
+        let (fri_params, ntt) = friVail
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
 
         // Encode codeword
-        let encoded_codeword = friveil
+        let encoded_codeword = friVail
             .encode_codeword(&packed_mle_values.packed_values, fri_params.clone(), &ntt)
             .expect("Failed to encode codeword");
 
         // Decode codeword
-        let decoded_codeword = friveil
+        let decoded_codeword = friVail
             .decode_codeword(&encoded_codeword, fri_params.clone(), &ntt)
             .expect("Failed to decode codeword");
 
@@ -1466,15 +1087,15 @@ mod tests {
             .bytes_to_packed_mle(&test_data)
             .expect("Failed to create packed MLE");
 
-        let friveil = TestFriVeil::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
+        let friVail = TestFriVail::new(1, 3, 2, packed_mle_values.packed_mle.log_len(), 3);
 
         // Initialize FRI context
-        let (fri_params, ntt) = friveil
+        let (fri_params, ntt) = friVail
             .initialize_fri_context(packed_mle_values.packed_mle.log_len())
             .expect("Failed to initialize FRI context");
 
         // Encode codeword
-        let encoded_codeword = friveil
+        let encoded_codeword = friVail
             .encode_codeword(&packed_mle_values.packed_values, fri_params.clone(), &ntt)
             .expect("Failed to encode codeword");
 
@@ -1499,7 +1120,7 @@ mod tests {
         );
 
         // Reconstruct corrupted codeword
-        friveil
+        friVail
             .reconstruct_codeword_naive(&mut corrupted_codeword, &corrupted_indices)
             .expect("Failed to reconstruct codeword");
 
@@ -1510,7 +1131,7 @@ mod tests {
         );
 
         // Decode the reconstructed codeword to verify it's correct
-        let decoded_reconstructed = friveil
+        let decoded_reconstructed = friVail
             .decode_codeword(&corrupted_codeword, fri_params.clone(), &ntt)
             .expect("Failed to decode reconstructed codeword");
 

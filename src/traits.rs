@@ -16,39 +16,9 @@ use binius_verifier::{
 };
 use std::mem::MaybeUninit;
 
-// ============================================================================
-// Type Aliases for Complex Types
-// ============================================================================
+use crate::types::*;
 
-/// Type alias for the Merkle tree prover
-pub type MerkleProver<P> = BinaryMerkleTreeProver<
-    <P as PackedField>::Scalar,
-    StdDigest,
-    ParallelCompressionAdaptor<StdCompression>,
->;
-
-/// Type alias for field element vectors
-pub type FieldElements<P> = Vec<<P as PackedField>::Scalar>;
-
-/// Type alias for results with field elements
-pub type FieldResult<P> = Result<FieldElements<P>, String>;
-
-/// Type alias for transcript results
-pub type TranscriptResult = Result<VerifierTranscript<StdChallenger>, String>;
-
-/// Type alias for byte vector results
-pub type ByteResult = Result<Vec<u8>, String>;
-
-/// Type alias for FRI query prover
-pub type FRIQueryProverAlias<'a, P> = FRIQueryProver<
-    'a,
-    <P as PackedField>::Scalar,
-    P,
-    MerkleProver<P>,
-    BinaryMerkleTreeScheme<<P as PackedField>::Scalar, StdDigest, StdCompression>,
->;
-
-pub trait FriVeilSampling<
+pub trait FriVailSampling<
     P: PackedField<Scalar = B128> + PackedExtension<B128> + PackedExtension<B1>,
     NTT: AdditiveNTT<Field = B128> + Sync,
 >
@@ -112,7 +82,7 @@ pub trait FriVeilSampling<
     ) -> Result<(), String>;
 }
 
-pub trait FriVeilUtils {
+pub trait FriVailUtils {
     fn get_transcript_bytes(&self, transcript: &VerifierTranscript<StdChallenger>) -> Vec<u8>;
     fn reconstruct_transcript_from_bytes(
         &self,

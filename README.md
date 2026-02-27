@@ -33,9 +33,9 @@ binius-das-poc = { path = "path/to/binius-das-poc" }
 
 ```rust
 use binius_das_poc::{
-    friveil::{B128, FriVeilDefault},
+    frivail::{B128, FriVailDefault},
     poly::Utils,
-    traits::{FriVeilSampling, FriVeilUtils},
+    traits::{FriVailSampling, FriVailUtils},
 };
 
 // 1. Generate or load your data
@@ -46,8 +46,8 @@ let packed_mle = Utils::<B128>::new()
     .bytes_to_packed_mle(&data)
     .expect("Failed to create MLE");
 
-// 3. Initialize FRI-Veil
-let friVeil = FriVeilDefault::new(
+// 3. Initialize FRI-Vail
+let friVail = FriVailDefault::new(
     1,                              // log_inv_rate: Reed-Solomon inverse rate
     128,                            // num_test_queries: FRI security parameter
     packed_mle.total_n_vars,        // n_vars: number of variables
@@ -55,12 +55,12 @@ let friVeil = FriVeilDefault::new(
 );
 
 // 4. Setup FRI context
-let (fri_params, ntt) = friVeil
+let (fri_params, ntt) = friVail
     .initialize_fri_context(packed_mle.packed_mle.clone())
     .expect("Failed to initialize FRI context");
 
 // 5. Generate commitment
-let commit_output = friVeil
+let commit_output = friVail
     .commit(packed_mle.packed_mle.clone(), fri_params.clone(), &ntt)
     .expect("Failed to commit");
 
@@ -73,12 +73,12 @@ println!("Commitment: {:?}", commit_output.commitment);
 
 ```rust
 // Encode data
-let encoded_codeword = friVeil
+let encoded_codeword = friVail
     .encode_codeword(&packed_mle.packed_values, fri_params.clone(), &ntt)
     .expect("Failed to encode");
 
 // Decode data
-let decoded_codeword = friVeil
+let decoded_codeword = friVail
     .decode_codeword(&encoded_codeword, fri_params.clone(), &ntt)
     .expect("Failed to decode");
 
@@ -103,7 +103,7 @@ for &idx in &corrupted_indices {
 }
 
 // Reconstruct corrupted data
-friVeil
+friVail
     .reconstruct_codeword_naive(&mut corrupted, &corrupted_indices)
     .expect("Failed to reconstruct");
 
@@ -127,14 +127,14 @@ let commitment_bytes: [u8; 32] = commit_output
 // Verify each sample
 for &sample_index in &indices {
     // Generate inclusion proof
-    let mut inclusion_proof = friVeil
+    let mut inclusion_proof = friVail
         .inclusion_proof(&commit_output.committed, sample_index)
         .expect("Failed to generate proof");
 
     let value = commit_output.codeword[sample_index];
 
     // Verify inclusion proof
-    friVeil
+    friVail
         .verify_inclusion_proof(
             &mut inclusion_proof,
             &[value],
@@ -150,12 +150,12 @@ for &sample_index in &indices {
 
 ```rust
 // Generate evaluation point
-let evaluation_point = friVeil
+let evaluation_point = friVail
     .calculate_evaluation_point_random()
     .expect("Failed to generate evaluation point");
 
 // Generate proof
-let mut verifier_transcript = friVeil
+let mut verifier_transcript = friVail
     .prove(
         packed_mle.packed_mle.clone(),
         fri_params.clone(),
@@ -166,12 +166,12 @@ let mut verifier_transcript = friVeil
     .expect("Failed to generate proof");
 
 // Calculate evaluation claim
-let evaluation_claim = friVeil
+let evaluation_claim = friVail
     .calculate_evaluation_claim(&packed_mle.packed_values, &evaluation_point)
     .expect("Failed to calculate claim");
 
 // Verify proof
-friVeil
+friVail
     .verify_evaluation(
         &mut verifier_transcript,
         evaluation_claim,
@@ -256,7 +256,7 @@ cargo test test_data_availability_sampling
 
 The library includes comprehensive tests:
 
-- `test_friveil_new`: Basic initialization
+- `test_frivail_new`: Basic initialization
 - `test_field_conversion_methods`: Field arithmetic
 - `test_calculate_evaluation_point_random`: Evaluation point generation
 - `test_initialize_fri_context`: FRI context setup
